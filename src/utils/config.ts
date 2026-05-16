@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 動的設定管理 (v1.2 - .envフォールバック削除)
+// Aikata - 動的設定管理 (v1.3 - apiKey分離 + AGENT_MODEL)
 // ==========================================
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -12,16 +12,10 @@ export interface ProviderEntry {
   name: string;
   type: ProviderType;
   baseUrl: string;
-  apiKey: string;
 }
 
 export interface ProvidersConfig {
   providers: Record<string, ProviderEntry>;
-}
-
-export interface ActiveConfig {
-  provider: string;
-  model: string;
 }
 
 export interface AgentRuntimeConfig {
@@ -29,10 +23,8 @@ export interface AgentRuntimeConfig {
 }
 
 const PROVIDERS_PATH = resolve(process.cwd(), "providers.json");
-const ACTIVE_PATH = resolve(process.cwd(), "active.json");
 
 let providersCache: ProvidersConfig | null = null;
-let activeCache: ActiveConfig | null = null;
 let runtimeConfig: AgentRuntimeConfig = {
   maxIterations: parseInt(process.env.MAX_ITERATIONS || "") || 200,
 };
@@ -52,24 +44,7 @@ function saveProviders(): void {
   writeFileSync(PROVIDERS_PATH, JSON.stringify(providersCache, null, 2), "utf-8");
 }
 
-function loadActive(): ActiveConfig {
-  if (!activeCache) {
-    if (existsSync(ACTIVE_PATH)) {
-      activeCache = JSON.parse(readFileSync(ACTIVE_PATH, "utf-8"));
-    } else {
-      const providers = loadProviders();
-      const first = Object.keys(providers.providers)[0] || "opencode";
-      activeCache = { provider: first, model: "deepseek/deepseek-v4-pro" };
-    }
-  }
-  return activeCache;
-}
-
-function saveActive(): void {
-  writeFileSync(ACTIVE_PATH, JSON.stringify(activeCache, null, 2), "utf-8");
-}
-
-// ==================== API ====================
+// ==================== プロバイダー管理 ====================
 
 export function getProviders(): ProvidersConfig {
   return loadProviders();
@@ -92,45 +67,66 @@ export function removeProvider(key: string): boolean {
   delete config.providers[key];
   saveProviders();
   providersCache = config;
-  // 削除したのがアクティブなら先頭に切替
-  const active = loadActive();
-  if (active.provider === key) {
-    const first = Object.keys(config.providers)[0];
-    if (first) {
-      activeCache = { provider: first, model: active.model };
-      saveActive();
-    }
-  }
   return true;
 }
 
-export function getActiveConfig(): ActiveConfig {
-  return loadActive();
+/** providers.jsonのキーに対応するAPIキーを.envから取得 (例: opencode → OPENCODE_API_KEY) */
+export function getApiKey(providerKey: string): string {
+  const envKey = `${providerKey.toUpperCase()}_API_KEY`;
+  return process.env[envKey] || "sk-dummy";
 }
 
-export function setActiveProvider(provider: string): void {
-  const config = loadProviders();
-  if (!config.providers[provider]) {
-    throw new Error(`プロバイダー '${provider}' は登録されていません。/providers で一覧を確認してください。`);
+// ==================== アクティブモデル (AGENT_MODEL) ====================
+
+/** AGENT_MODEL をパース: "opencode/deepseek/deepseek-v4-pro" → { provider, model } */
+export function getActiveModel(): { provider: string; model: string } {
+  const raw = process.env.AGENT_MODEL || "opencode/deepseek/deepseek-v4-pro";
+  const slashIdx = raw.indexOf("/");
+  if (slashIdx === -1) {
+    // "/" がない場合、プロバイダーは最初の登録済みから、モデルは全体
+    const first = Object.keys(loadProviders().providers)[0] || "opencode";
+    return { provider: first, model: raw };
   }
-  activeCache = { ...loadActive(), provider };
-  saveActive();
+  return {
+    provider: raw.slice(0, slashIdx),
+    model: raw.slice(slashIdx + 1),
+  };
 }
 
-export function setActiveModel(model: string): void {
-  activeCache = { ...loadActive(), model };
-  saveActive();
+export function setActiveModel(providerModel: string): void {
+  process.env.AGENT_MODEL = providerModel;
+  writeEnv("AGENT_MODEL", providerModel);
 }
 
-export function getActiveProviderEntry(): ProviderEntry {
-  const active = loadActive();
-  const providers = loadProviders();
-  const entry = providers.providers[active.provider];
-  if (!entry) {
-    throw new Error(`アクティブプロバイダー '${active.provider}' が providers.json にありません。`);
-  }
-  return entry;
+/** モデル名だけ変更（プロバイダーは維持） */
+export function setActiveModelOnly(modelName: string): void {
+  const { provider } = getActiveModel();
+  setActiveModel(`${provider}/${modelName}`);
 }
+
+/** プロバイダーだけ変更（モデルは維持） */
+export function setActiveProvider(providerKey: string): void {
+  const { model } = getActiveModel();
+  setActiveModel(`${providerKey}/${model}`);
+}
+
+function writeEnv(key: string, value: string): void {
+  try {
+    const envPath = resolve(process.cwd(), ".env");
+    if (existsSync(envPath)) {
+      let content = readFileSync(envPath, "utf-8");
+      const regex = new RegExp(`^${key}=.*$`, "m");
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${value}`);
+      } else {
+        content += `\n${key}=${value}\n`;
+      }
+      writeFileSync(envPath, content, "utf-8");
+    }
+  } catch { /* ignore */ }
+}
+
+// ==================== ランタイム ====================
 
 export function getRuntimeConfig(): AgentRuntimeConfig {
   return { ...runtimeConfig };

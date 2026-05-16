@@ -1,9 +1,9 @@
 // ==========================================
-// Aikata - LLMプロバイダー (OpenAI/Anthropic/Gemini対応)
+// Aikata - LLMプロバイダー (v1.3 - apiKey分離 + AGENT_MODEL)
 // ==========================================
 
 import type { LLMProvider, LLMResponse, Message, Tool, ToolCall } from "../types";
-import { getActiveConfig, getActiveProviderEntry, getProvider, type ProviderEntry, type ProviderType } from "../utils/config";
+import { getProvider, getApiKey, getActiveModel, type ProviderEntry, type ProviderType } from "../utils/config";
 import { logger } from "../utils/logger";
 
 // ==================== メッセージ形式変換 ====================
@@ -74,20 +74,15 @@ function parseAnthropicResponse(json: any): LLMResponse {
   const content = json.content?.[0];
   let text: string | null = null;
   let tool_calls: ToolCall[] | null = null;
-
-  if (content?.type === "text") {
-    text = content.text;
-  } else if (content?.type === "tool_use") {
+  if (content?.type === "text") { text = content.text; }
+  else if (content?.type === "tool_use") {
     tool_calls = [{
-      id: content.id || "tc1",
-      type: "function",
+      id: content.id || "tc1", type: "function",
       function: { name: content.name, arguments: JSON.stringify(content.input || {}) },
     }];
   }
-
   return {
-    content: text,
-    tool_calls,
+    content: text, tool_calls,
     finishReason: json.stop_reason || "stop",
     usage: json.usage ? {
       promptTokens: json.usage.input_tokens,
@@ -102,21 +97,15 @@ function parseGeminiResponse(json: any): LLMResponse {
   const content = candidate?.content;
   let text = "";
   const tool_calls: ToolCall[] = [];
-
   for (const part of content?.parts || []) {
     if (part.text) text += part.text;
     if (part.functionCall) {
       tool_calls.push({
-        id: `gc${tool_calls.length}`,
-        type: "function",
-        function: {
-          name: part.functionCall.name,
-          arguments: JSON.stringify(part.functionCall.args || {}),
-        },
+        id: `gc${tool_calls.length}`, type: "function",
+        function: { name: part.functionCall.name, arguments: JSON.stringify(part.functionCall.args || {}) },
       });
     }
   }
-
   return {
     content: text || null,
     tool_calls: tool_calls.length > 0 ? tool_calls : null,
@@ -150,12 +139,14 @@ function getModelsUrl(entry: ProviderEntry): string {
 // ==================== プロバイダー作成 ====================
 
 export function createActiveProvider(): LLMProvider {
-  const active = getActiveConfig();
-  const entry = getActiveProviderEntry();
-  return createProvider(entry, active.model);
+  const { provider: providerKey, model } = getActiveModel();
+  const entry = getProvider(providerKey);
+  if (!entry) throw new Error(`プロバイダー '${providerKey}' が providers.json にありません。`);
+  const apiKey = getApiKey(providerKey);
+  return createProvider(entry, model, apiKey);
 }
 
-function createProvider(entry: ProviderEntry, model: string): LLMProvider {
+function createProvider(entry: ProviderEntry, model: string, apiKey: string): LLMProvider {
   const url = getChatUrl(entry, model);
 
   return {
@@ -165,41 +156,26 @@ function createProvider(entry: ProviderEntry, model: string): LLMProvider {
     async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
       let body: any;
       let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let finalUrl = url;
 
       switch (entry.type) {
         case "openai": {
           body = { model, messages, temperature: 0.7, max_tokens: 4096 };
-          if (tools.length > 0) {
-            body.tools = toOpenAITools(tools);
-            body.tool_choice = "auto";
-          }
-          headers["Authorization"] = `Bearer ${entry.apiKey}`;
+          if (tools.length > 0) { body.tools = toOpenAITools(tools); body.tool_choice = "auto"; }
+          headers["Authorization"] = `Bearer ${apiKey}`;
           break;
         }
         case "anthropic": {
-          const converted = messagesToAnthropic(messages);
-          body = {
-            model,
-            max_tokens: 4096,
-            messages: converted.messages,
-            ...(converted.system ? { system: converted.system } : {}),
-            ...(tools.length > 0 ? { tools: toOpenAITools(tools) } : {}),
-          };
-          headers["x-api-key"] = entry.apiKey;
+          const c = messagesToAnthropic(messages);
+          body = { model, max_tokens: 4096, messages: c.messages, ...(c.system ? { system: c.system } : {}), ...(tools.length > 0 ? { tools: toOpenAITools(tools) } : {}) };
+          headers["x-api-key"] = apiKey;
           headers["anthropic-version"] = "2023-06-01";
           break;
         }
         case "gemini": {
-          const converted = messagesToGemini(messages);
-          body = {
-            contents: converted.contents,
-            ...(converted.systemInstruction ? { systemInstruction: converted.systemInstruction } : {}),
-            ...(tools.length > 0 ? { tools: [{ functionDeclarations: toOpenAITools(tools).map((t: any) => t.function) }] } : {}),
-          };
-          url.replace(/{model}/g, model); // URLのモデル部分はすでに設定済み
-          if (entry.apiKey) {
-            url.includes("?") ? null : null;
-          }
+          const c = messagesToGemini(messages);
+          body = { contents: c.contents, ...(c.systemInstruction ? { systemInstruction: c.systemInstruction } : {}), ...(tools.length > 0 ? { tools: [{ functionDeclarations: toOpenAITools(tools).map((t: any) => t.function) }] } : {}) };
+          if (apiKey) finalUrl = `${url}?key=${apiKey}`;
           break;
         }
       }
@@ -207,26 +183,18 @@ function createProvider(entry: ProviderEntry, model: string): LLMProvider {
       logger.debug(`LLM: ${entry.type}/${model}`);
 
       const startTime = Date.now();
-      const finalUrl = entry.type === "gemini" && entry.apiKey
-        ? `${url}?key=${entry.apiKey}`
-        : url;
-
       const response = await fetch(finalUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
+        method: "POST", headers, body: JSON.stringify(body),
         signal: AbortSignal.timeout(120_000),
       });
 
       const elapsed = Date.now() - startTime;
-
       if (!response.ok) {
         const errText = await response.text().catch(() => "unknown");
         throw new Error(`LLM API エラー (${response.status}): ${errText.slice(0, 500)}`);
       }
 
       const json = await response.json() as any;
-
       let result: LLMResponse;
       switch (entry.type) {
         case "openai": result = parseOpenAIResponse(json); break;
@@ -246,36 +214,25 @@ function createProvider(entry: ProviderEntry, model: string): LLMProvider {
 export async function fetchModels(providerKey: string): Promise<string[]> {
   const entry = getProvider(providerKey);
   if (!entry) throw new Error(`プロバイダー '${providerKey}' が見つかりません`);
+  const apiKey = getApiKey(providerKey);
 
-  const url = getModelsUrl(entry);
+  let url = getModelsUrl(entry);
   const headers: Record<string, string> = {};
-  let finalUrl = url;
 
   switch (entry.type) {
-    case "openai":
-      headers["Authorization"] = `Bearer ${entry.apiKey}`;
-      break;
-    case "anthropic":
-      headers["x-api-key"] = entry.apiKey;
-      break;
-    case "gemini":
-      if (entry.apiKey) finalUrl = `${url}?key=${entry.apiKey}`;
-      break;
+    case "openai": headers["Authorization"] = `Bearer ${apiKey}`; break;
+    case "anthropic": headers["x-api-key"] = apiKey; break;
+    case "gemini": if (apiKey) url = `${url}?key=${apiKey}`; break;
   }
 
-  const res = await fetch(finalUrl, { headers, signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`モデル一覧取得失敗: ${res.status}`);
-
   const json = await res.json() as any;
 
   switch (entry.type) {
-    case "openai":
-      return (json.data || []).map((m: any) => m.id).sort();
-    case "anthropic":
-      return (json.data || []).map((m: any) => m.id).sort();
-    case "gemini":
-      return (json.models || []).map((m: any) => m.name.replace("models/", "")).sort();
-    default:
-      return [];
+    case "openai": return (json.data || []).map((m: any) => m.id).sort();
+    case "anthropic": return (json.data || []).map((m: any) => m.id).sort();
+    case "gemini": return (json.models || []).map((m: any) => m.name.replace("models/", "")).sort();
+    default: return [];
   }
 }

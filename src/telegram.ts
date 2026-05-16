@@ -8,8 +8,9 @@ import { SYSTEM_PROMPT } from "./system-prompt";
 import { resetConversation, listCronJobs } from "./repo";
 import { logger } from "./utils/logger";
 import {
-  getProviders, addProvider, removeProvider, getActiveConfig,
-  setActiveProvider, setActiveModel, getRuntimeConfig, setMaxIterations,
+  getProviders, addProvider, removeProvider,
+  setActiveProvider, setActiveModelOnly, getActiveModel,
+  getRuntimeConfig, setMaxIterations,
 } from "./utils/config";
 import { createActiveProvider, fetchModels } from "./providers/base";
 import type { LLMProvider } from "./types";
@@ -67,7 +68,7 @@ export async function startTelegramBot(
   });
 
   bot.command("info", async (ctx) => {
-    const active = getActiveConfig();
+    const active = getActiveModel();
     const runtime = getRuntimeConfig();
     await ctx.reply(
       `プロバイダー: ${active.provider}\nモデル: ${active.model}\n最大反復: ${runtime.maxIterations}`
@@ -87,13 +88,13 @@ export async function startTelegramBot(
   bot.command("model", async (ctx) => {
     const arg = ctx.match?.trim();
     if (!arg) { await ctx.reply("使い方: /model <モデル名>"); return; }
-    setActiveModel(arg);
+    setActiveModelOnly(arg);
     reloadProvider();
     await ctx.reply(`モデルを **${arg}** に切替。`);
   });
 
   bot.command("models", async (ctx) => {
-    const active = getActiveConfig();
+    const active = getActiveModel();
     try {
       const models = await fetchModels(active.provider);
       await ctx.reply(`**${active.provider}** (${models.length}件):\n${models.slice(0, 20).join("\n")}`);
@@ -102,7 +103,7 @@ export async function startTelegramBot(
 
   bot.command("providers", async (ctx) => {
     const providers = getProviders();
-    const active = getActiveConfig();
+    const active = getActiveModel();
     const list = Object.entries(providers.providers).map(([k, v]) =>
       `${k === active.provider ? "▶ " : "  "}${k} → ${v.baseUrl}`
     ).join("\n");
@@ -111,9 +112,9 @@ export async function startTelegramBot(
 
   bot.command("addprovider", async (ctx) => {
     const parts = ctx.match?.trim().split(/\s+/) || [];
-    if (parts.length < 3) { await ctx.reply("使い方: /addprovider <key> <baseUrl> <apiKey>"); return; }
+    if (parts.length < 3) { await ctx.reply("使い方: /addprovider <key> <type> <baseUrl>"); return; }
     const [key, baseUrl, apiKey] = parts;
-    addProvider(key!, { name: key!, baseUrl: baseUrl!, apiKey: apiKey! });
+    addProvider(key!, { name: key!, type: (baseUrl as any), baseUrl: baseUrl! });
     await ctx.reply(`プロバイダー **${key}** を追加。`);
   });
 

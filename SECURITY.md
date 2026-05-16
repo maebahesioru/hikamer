@@ -2,10 +2,7 @@
 
 ## 報告方法
 
-脆弱性を発見した場合は、Issueではなく**直接DM**で報告してください。
-
-- Discord: `zyuuzika`
-- X (Twitter): `@maebahesioru2`
+脆弱性を発見した場合は [Issue](https://github.com/maebahesioru/aikata/issues) を作成してください。
 
 ## 対象範囲
 

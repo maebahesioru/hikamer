@@ -8,8 +8,9 @@ import { SYSTEM_PROMPT } from "./system-prompt";
 import { resetConversation, updateConversationTitle, getConversationThreadId } from "./repo";
 import { logger } from "./utils/logger";
 import {
-  getProviders, addProvider, removeProvider, getActiveConfig,
-  setActiveProvider, setActiveModel, getRuntimeConfig, setMaxIterations,
+  getProviders, addProvider, removeProvider,
+  setActiveProvider, setActiveModelOnly, getActiveModel,
+  getRuntimeConfig, setMaxIterations,
   type ProviderType,
 } from "./utils/config";
 import { createActiveProvider, fetchModels } from "./providers/base";
@@ -50,7 +51,7 @@ export async function startDiscord(token: string): Promise<Client> {
         .addStringOption(o => o.setName("type").setDescription("API形式").setRequired(true)
           .addChoices({name:"OpenAI",value:"openai"},{name:"Anthropic",value:"anthropic"},{name:"Gemini",value:"gemini"}))
         .addStringOption(o => o.setName("baseurl").setDescription("APIベースURL").setRequired(true))
-        .addStringOption(o => o.setName("apikey").setDescription("APIキー").setRequired(true)))
+        )
       .addSubcommand(s => s.setName("del").setDescription("削除")
         .addStringOption(o => o.setName("key").setDescription("プロバイダーキー").setRequired(true))),
     new SlashCommandBuilder().setName("model").setDescription("モデル切替")
@@ -97,7 +98,7 @@ export async function startDiscord(token: string): Promise<Client> {
           switch (sub) {
             case "list": {
               const providers = getProviders();
-              const active = getActiveConfig();
+              const active = getActiveModel();
               const list = Object.entries(providers.providers).map(([k, v]) =>
                 `${k === active.provider ? "▶ " : "   "}**${k}** (${v.type}) → ${v.baseUrl}`
               ).join("\n");
@@ -116,7 +117,7 @@ export async function startDiscord(token: string): Promise<Client> {
               const type = interaction.options.getString("type", true) as ProviderType;
               const baseUrl = interaction.options.getString("baseurl", true);
               const apiKey = interaction.options.getString("apikey", true);
-              addProvider(key, { name: key, type, baseUrl, apiKey });
+              addProvider(key, { name: key, type, baseUrl });
               await interaction.reply(`**${key}** (${type}) を追加。\n\`/provider set ${key}\` で切替可能。`);
               break;
             }
@@ -131,7 +132,7 @@ export async function startDiscord(token: string): Promise<Client> {
         }
         case "model": {
           const name = interaction.options.getString("名前", true);
-          setActiveModel(name);
+          setActiveModelOnly(name);
           provider = createActiveProvider();
           await interaction.reply(`モデルを **${name}** に切替えた。`);
           break;
@@ -139,7 +140,7 @@ export async function startDiscord(token: string): Promise<Client> {
         case "models": {
           await interaction.deferReply();
           try {
-            const active = getActiveConfig();
+            const active = getActiveModel();
             const models = await fetchModels(active.provider);
             const list = models.slice(0, 30).join("\n");
             await interaction.editReply(`**${active.provider}** のモデル一覧 (${models.length}件):\n${list}${models.length > 30 ? `\n…他 ${models.length - 30} 件` : ""}`);
@@ -150,7 +151,7 @@ export async function startDiscord(token: string): Promise<Client> {
         }
         case "providers": {
           const providers = getProviders();
-          const active = getActiveConfig();
+          const active = getActiveModel();
           const list = Object.entries(providers.providers).map(([k, v]) =>
             `${k === active.provider ? "▶ " : "   "}**${k}** → ${v.baseUrl}`
           ).join("\n");
@@ -158,7 +159,7 @@ export async function startDiscord(token: string): Promise<Client> {
           break;
         }
         case "info": {
-          const active = getActiveConfig();
+          const active = getActiveModel();
           const runtime = getRuntimeConfig();
           await interaction.reply(
             `**Aikata 設定**\n` +

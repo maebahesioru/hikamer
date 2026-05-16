@@ -9,8 +9,9 @@ import { SYSTEM_PROMPT } from "./system-prompt";
 import { logger } from "./utils/logger";
 import { resetConversation } from "./repo";
 import {
-  getProviders, addProvider, removeProvider, getActiveConfig,
-  setActiveProvider, setActiveModel, getRuntimeConfig, setMaxIterations,
+  getProviders, addProvider, removeProvider,
+  setActiveProvider, setActiveModelOnly, getActiveModel,
+  getRuntimeConfig, setMaxIterations,
   type ProviderType,
 } from "./utils/config";
 import { createActiveProvider, fetchModels } from "./providers/base";
@@ -34,7 +35,7 @@ function printHelp() {
 }
 
 logger.info("Aikata CLI v1.2");
-logger.info(`${getActiveConfig().provider}/${getActiveConfig().model}`);
+logger.info(`${getActiveModel().provider}/${getActiveModel().model}`);
 printHelp();
 
 const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: "💬> " });
@@ -56,7 +57,7 @@ rl.on("line", async (line) => {
         case "/exit": logger.info("またな！"); rl.close(); process.exit(0);
         case "/reset": resetConversation(cid); logger.info("リセット。"); break;
         case "/info": {
-          const a = getActiveConfig(); const r = getRuntimeConfig();
+          const a = getActiveModel(); const r = getRuntimeConfig();
           console.log(`provider=${a.provider} model=${a.model} maxIter=${r.maxIterations}`);
           break;
         }
@@ -64,7 +65,7 @@ rl.on("line", async (line) => {
           const sub = parts[1];
           if (!sub || sub === "list") {
             const providers = getProviders();
-            const active = getActiveConfig();
+            const active = getActiveModel();
             for (const [k, v] of Object.entries(providers.providers)) {
               console.log(`${k === active.provider ? "▶" : " "} ${k} (${v.type}) → ${v.baseUrl}`);
             }
@@ -74,8 +75,8 @@ rl.on("line", async (line) => {
             setActiveProvider(name); provider = createActiveProvider(); console.log(`→ ${name}`);
           } else if (sub === "add") {
             const [,, key, type, baseUrl, apiKey] = parts;
-            if (!key || !type || !baseUrl) { console.log("使い方: /provider add <key> <openai|anthropic|gemini> <baseUrl> <apiKey>"); break; }
-            addProvider(key, { name: key, type: type as ProviderType, baseUrl, apiKey: apiKey || "sk-dummy" });
+            if (!key || !type || !baseUrl) { console.log("使い方: /provider add <key> <openai|anthropic|gemini> <baseUrl>"); break; }
+            addProvider(key, { name: key, type: type as ProviderType, baseUrl });
             console.log(`追加: ${key} (${type})`);
           } else if (sub === "del") {
             const key = parts[2]; if (!key) { console.log("使い方: /provider del <key>"); break; }
@@ -84,11 +85,11 @@ rl.on("line", async (line) => {
           break;
         }
         case "/model": {
-          setActiveModel(parts[1] || ""); provider = createActiveProvider(); console.log(`→ ${parts[1]}`);
+          setActiveModelOnly(parts[1] || ""); provider = createActiveProvider(); console.log(`→ ${parts[1]}`);
           break;
         }
         case "/models": {
-          const models = await fetchModels(getActiveConfig().provider);
+          const models = await fetchModels(getActiveModel().provider);
           console.log(models.slice(0, 30).join("\n"));
           break;
         }

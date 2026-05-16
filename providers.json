@@ -3,14 +3,12 @@
     "opencode": {
       "name": "OpenCode Go",
       "type": "openai",
-      "baseUrl": "http://localhost:8080",
-      "apiKey": "sk-dummy"
+      "baseUrl": "http://localhost:8080"
     },
     "crofai": {
       "name": "CrofAI",
       "type": "openai",
-      "baseUrl": "https://api.crofai.com",
-      "apiKey": "sk-your-key-here"
+      "baseUrl": "https://api.crofai.com"
     }
   }
 }
