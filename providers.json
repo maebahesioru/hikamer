@@ -1,0 +1,16 @@
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode Go",
+      "type": "openai",
+      "baseUrl": "http://localhost:8080",
+      "apiKey": "sk-dummy"
+    },
+    "crofai": {
+      "name": "CrofAI",
+      "type": "openai",
+      "baseUrl": "https://api.crofai.com",
+      "apiKey": "sk-your-key-here"
+    }
+  }
+}
