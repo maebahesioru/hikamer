@@ -265,6 +265,49 @@ registerCommand("mail", async (args) => {
   return "不明なサブコマンド";
 });
 
+registerCommand("sessions", async (args) => {
+  const { sessionManager } = await import("./session-manager");
+  if (!args) {
+    return sessionManager.formatSessions(sessionManager.listActive(), "アクティブセッション");
+  }
+  const parts = args.split(" ");
+  const cmd = parts[0];
+  const id = parts[1] || "";
+  const rest = parts.slice(2).join(" ");
+  if (cmd === "pin" && id) return sessionManager.togglePin(id) ? "📌 ピン留め切替" : "❌ セッションなし";
+  if (cmd === "archive" && id) return sessionManager.toggleArchive(id) ? "🗄️ アーカイブ切替" : "❌ セッションなし";
+  if (cmd === "star" && id) return sessionManager.toggleStar(id) ? "⭐ スター切替" : "❌ セッションなし";
+  if (cmd === "title" && id && rest) return sessionManager.setTitle(id, rest) ? `✅ タイトル変更: ${rest}` : "❌ 失敗";
+  if (cmd === "pinned") return sessionManager.formatSessions(sessionManager.listPinned(), "ピン留め");
+  if (cmd === "archived") return sessionManager.formatSessions(sessionManager.listArchived(), "アーカイブ");
+  return sessionManager.formatSessions(sessionManager.search(args), `検索: ${args}`);
+});
+
+registerCommand("ocr", async (args) => {
+  const { ocrEngine } = await import("./screen");
+  if (args === "check") {
+    const caps = ocrEngine.checkCapabilities();
+    return `🖥️ **OCR能力**\n利用可能: ${caps.length > 0 ? caps.join(", ") : "なし"}`;
+  }
+  return "OCR: `/ocr check` で能力確認。画像認識はメッセージ内の画像に対して自動実行。";
+});
+
+registerCommand("heal", async () => {
+  const { selfHealer } = await import("./self-healer");
+  return selfHealer.formatStatus();
+});
+
+registerCommand("contacts", async (args) => {
+  const { contactManager } = await import("./contacts");
+  if (!args) return contactManager.formatContacts(contactManager.listContacts());
+  if (args.startsWith("search ")) return contactManager.formatContacts(contactManager.search(args.slice(7)));
+  if (args === "stats") {
+    const s = contactManager.getStats();
+    return `👤 **連絡先統計**\n合計: ${s.total} | お気に入り: ${s.favorite} | ブロック: ${s.blocked} | グループ: ${s.groups}`;
+  }
+  return contactManager.formatContacts(contactManager.search(args));
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -335,8 +378,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.11 起動中…");
-  logger.info(" ModelRouting / Credentials / VoiceTTS / Notifications / ContextManager");
+  logger.info(" Aikata v1.13 起動中…");
+  logger.info(" ScreenOCR / Embeddings / SessionManager / SelfHealer / Contacts");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
