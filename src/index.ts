@@ -5,12 +5,10 @@
 import "dotenv/config";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve } from "path";
-import { registerAllTools } from "./tools/index";
+import "./tools/index";
 import { logger } from "./utils/logger";
 // DB初期化
 import "./db";
-
-registerAllTools();
 
 const DATA_DIR = process.env.DATA_DIR || "./data";
 const STATUS_PATH = resolve(DATA_DIR, "status.json");

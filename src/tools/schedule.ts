@@ -9,10 +9,13 @@ import {
   listCronJobs,
   toggleCronJob,
 } from "../repo";
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 import * as cron from "node-cron";
 
-export const scheduleTool: Tool = {
+const scheduleTool: ToolDescriptor = {
+  emoji: "⏰",
+  owner: "core",
   name: "schedule",
   description:
     "定期実行タスクを管理します。指定したcron式で定期的にプロンプトを実行します。",
@@ -119,3 +122,6 @@ export const scheduleTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(scheduleTool);
+export { scheduleTool };

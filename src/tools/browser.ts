@@ -4,7 +4,8 @@
 // playwright: 直接操作 (camofox未起動時の自動フォールバック)
 // ==========================================
 
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 import { logger } from "../utils/logger";
 
 const CAMOFOX_URL = process.env.CAMOFOX_URL || "http://localhost:9377";
@@ -210,7 +211,9 @@ async function fallbackPlaywright(args: Record<string, unknown>): Promise<string
 
 // ==================== ツール本体 ====================
 
-export const browserTool: Tool = {
+const browserTool: ToolDescriptor = {
+  emoji: "🌐",
+  owner: "core",
   name: "browser",
   description: "camofoxステルスブラウザ(優先) または playwright(自動フォールバック)でWebを操作。navigate/extract/click/type/screenshot/close。",
   parameters: {
@@ -279,3 +282,6 @@ export const browserTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(browserTool);
+export { browserTool };

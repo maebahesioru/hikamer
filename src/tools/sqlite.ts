@@ -3,9 +3,12 @@
 // ==========================================
 
 import { db } from "../db";
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 
-export const sqliteTool: Tool = {
+const sqliteTool: ToolDescriptor = {
+  emoji: "🗄️",
+  owner: "core",
   name: "sqlite",
   description: "AikataのSQLiteデータベースを読み取り専用でクエリします。テーブル: conversations, messages, tool_logs, cron_jobs, config。",
   parameters: {
@@ -42,3 +45,6 @@ export const sqliteTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(sqliteTool);
+export { sqliteTool };

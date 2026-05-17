@@ -16,6 +16,7 @@ import {
 } from "./utils/config";
 import { createActiveProvider, fetchModels, setOnRetry } from "./providers/base";
 import type { LLMProvider, LLMChunk } from "./types";
+import { toolRegistry } from "./tools/registry";
 
 // ==================== 共通: プロバイダー管理 ====================
 let provider = createActiveProvider();
@@ -42,22 +43,39 @@ function splitMessage(text: string, maxLen: number): string[] {
 
 // ==================== 共通: ツール表示 ====================
 function formatTool(toolName: string, args: Record<string, unknown>): string {
+  // レジストリから絵文字+表示名を動的に取得
+  const desc = toolRegistry.getDescriptor(toolName);
+  const emoji = desc?.emoji || "🔧";
+  const label = toolName;
+
   switch (toolName) {
-    case "terminal": { const c = String(args.command || "?"); return `💻 ターミナル: ${c.length > 70 ? c.slice(0, 70) + "…" : c}`; }
-    case "web_search": return `🌐 Web検索: ${(args.query as string)?.slice(0, 80) || "?"}`;
-    case "code_execute": { const c = String(args.code || "?"); return `⚡ コード実行: ${c.length > 60 ? c.slice(0, 60) + "…" : c}`; }
+    case "terminal": {
+      const c = String(args.command || "?");
+      return `${emoji} ${label}: ${c.length > 70 ? c.slice(0, 70) + "…" : c}`;
+    }
+    case "web_search": {
+      return `${emoji} Web検索: ${(args.query as string)?.slice(0, 80) || "?"}`;
+    }
+    case "code_execute": {
+      const c = String(args.code || "?");
+      return `${emoji} コード実行: ${c.length > 60 ? c.slice(0, 60) + "…" : c}`;
+    }
     case "browser": {
       const action = String(args.action || "?");
       switch (action) {
-        case "navigate": return `🌐 ブラウザ: ${(args.url as string)?.slice(0, 60) || "?"}`;
+        case "navigate": return `${emoji} ブラウザ: ${(args.url as string)?.slice(0, 60) || "?"}`;
         case "click": return `🖱️ ブラウザクリック: ${(args.selector as string)?.slice(0, 40) || "?"}`;
         case "type": return `⌨️ ブラウザ入力: "${(args.text as string)?.slice(0, 30) || "?"}" → ${(args.selector as string)?.slice(0, 30) || "?"}`;
         case "extract": return `📄 ブラウザ抽出`;
         case "screenshot": return `📸 ブラウザスクリーンショット`;
-        default: return `🌐 ブラウザ: ${action}`;
+        default: return `${emoji} ブラウザ: ${action}`;
       }
     }
-    default: return `🔧 ${toolName}`;
+    default: {
+      // fallback: ツール名の先頭action引数があれば表示
+      const action = args.action ? ` (${String(args.action)})` : "";
+      return `${emoji} ${toolName}${action}`;
+    }
   }
 }
 

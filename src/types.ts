@@ -51,6 +51,21 @@ export interface Tool {
   execute(args: Record<string, unknown>): Promise<string>;
 }
 
+/** 拡張ツール記述子（自己登録・可用性・絵文字対応） */
+export interface ToolDescriptor extends Tool {
+  /** ツール表示絵文字（formatToolで使用） */
+  emoji: string;
+  /** 所有者カテゴリ */
+  owner: "core" | "plugin" | "mcp";
+  /** 可用性条件（省略時は常に利用可能） */
+  availability?: {
+    /** 有効にするのに必要な環境変数 */
+    requiresEnv?: string[];
+    /** 追加の条件チェック関数（trueなら利用可能） */
+    checkFn?: () => boolean;
+  };
+}
+
 export interface LLMProvider {
   readonly name: string;
   readonly model: string;

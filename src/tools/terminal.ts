@@ -5,14 +5,17 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { platform } from "os";
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 
 const execAsync = promisify(exec);
 
 const isWindows = platform() === "win32";
 
-export const terminalTool: Tool = {
+const descriptor: ToolDescriptor = {
   name: "terminal",
+  emoji: "💻",
+  owner: "core",
   description: `シェルコマンドを実行します。${isWindows ? "Windows (cmd.exe)" : "Linux (bash)"} 環境です。`,
   parameters: {
     type: "object",
@@ -41,7 +44,7 @@ export const terminalTool: Tool = {
     try {
       const { stdout, stderr } = await execAsync(command, {
         timeout,
-        maxBuffer: 10 * 1024 * 1024, // 10MB
+        maxBuffer: 10 * 1024 * 1024,
         cwd: workdir,
         shell: isWindows ? "cmd.exe" : "/bin/bash",
         windowsHide: true,
@@ -58,3 +61,6 @@ export const terminalTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(descriptor);
+export { descriptor as terminalTool };

@@ -3,7 +3,7 @@
 // ==========================================
 
 import { createInterface } from "readline";
-import { registerAllTools } from "./tools/index";
+import "./tools/index"; // 自己登録
 import { agentLoop } from "./agent";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { logger } from "./utils/logger";
@@ -17,7 +17,6 @@ import {
 import { createActiveProvider, fetchModels } from "./providers/base";
 import "./db";
 
-registerAllTools();
 let provider = createActiveProvider();
 
 function printHelp() {

@@ -3,11 +3,14 @@
 // ==========================================
 
 import { getSearxngUrl } from "../utils/config";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 import { logger } from "../utils/logger";
-import type { Tool } from "../types";
 
-export const webTool: Tool = {
+const webTool: ToolDescriptor = {
   name: "web_search",
+  emoji: "🌐",
+  owner: "core",
   description: "Web検索を実行します。SearXNGエンジンを使用。",
   parameters: {
     type: "object",
@@ -74,3 +77,6 @@ export const webTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(webTool);
+export { webTool };

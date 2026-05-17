@@ -5,7 +5,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "fs";
 import { join, resolve, dirname } from "path";
 import { readdirSync } from "fs";
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 
 /** 指定ディレクトリ配下のみ許可（簡単なパストラバーサル対策） */
 const ALLOWED_BASE = resolve(process.cwd());
@@ -26,7 +27,9 @@ function safePath(inputPath: string): string {
   return resolved;
 }
 
-export const fileTool: Tool = {
+const fileTool: ToolDescriptor = {
+  emoji: "📄",
+  owner: "core",
   name: "file",
   description: "ファイルの読み書き・検索・一覧表示を行います。",
   parameters: {
@@ -125,3 +128,6 @@ export const fileTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(fileTool);
+export { fileTool };

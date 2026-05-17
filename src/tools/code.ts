@@ -7,11 +7,13 @@ import { promisify } from "util";
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
-import type { Tool } from "../types";
+import type { ToolDescriptor } from "../types";
+import { toolRegistry } from "./registry";
 
 const execAsync = promisify(exec);
-
-export const codeTool: Tool = {
+const codeTool: ToolDescriptor = {
+  emoji: "⚡",
+  owner: "core",
   name: "code_execute",
   description: "Python または JavaScript コードを一時ファイルに保存して実行します。",
   parameters: {
@@ -96,3 +98,6 @@ export const codeTool: Tool = {
     }
   },
 };
+
+toolRegistry.register(codeTool);
+export { codeTool };
