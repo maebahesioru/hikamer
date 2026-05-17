@@ -16,5 +16,8 @@ import "./search";
 import "./export";
 import "./web-fetch";
 import "./process";
+import "./send-message";
+import "./skills";
+import "./cron-manager";
 
 export { toolRegistry } from "./registry";
