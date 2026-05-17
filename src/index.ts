@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.9: CostTracker + HealthWatchdog + RateLimiter + PromptGuard + Git
+// v1.10: FileWatcher + MCPServer + Subconscious + MemoryTree + ApprovalWorkflow
 // ==========================================
 
 import "dotenv/config";
@@ -17,6 +17,9 @@ import { startWatchdog, handleHealthCommand, setToolCount } from "./health";
 import { checkRateLimit } from "./rate-limiter";
 import { scanInput, formatScanResult } from "./prompt-inject";
 import { toolRegistry } from "./tools/registry";
+import { startMcpServer } from "./mcp-server";
+import { subconscious } from "./subconscious";
+import { approvalManager } from "./approval-workflow";
 // DB初期化
 import "./db";
 
@@ -161,6 +164,28 @@ registerCommand("tools", async () => {
   return `**利用可能ツール (${tools.length}個)**\n${tools.map(t => `${toolRegistry.getEmoji(t.name)} \`${t.name}\``).join("\n")}`;
 });
 
+registerCommand("approve", async (id, userId) => {
+  if (!id) return "承認するリクエストIDを指定してください。\n`/approve <id> [メモ]`";
+  const parts = id.split(" ");
+  const reqId = parts[0];
+  const note = parts.slice(1).join(" ");
+  const ok = approvalManager.approve(reqId, userId, note || undefined);
+  return ok ? `✅ 承認しました: \`${reqId}\`` : `❌ リクエスト \`${reqId}\` は見つからないか、すでに処理済みです。`;
+});
+
+registerCommand("reject", async (id, userId) => {
+  if (!id) return "拒否するリクエストIDを指定してください。\n`/reject <id> [理由]`";
+  const parts = id.split(" ");
+  const reqId = parts[0];
+  const reason = parts.slice(1).join(" ");
+  const ok = approvalManager.reject(reqId, userId, reason || undefined);
+  return ok ? `❌ 拒否しました: \`${reqId}\`${reason ? ` (理由: ${reason})` : ""}` : `❌ リクエスト \`${reqId}\` は見つからないか、すでに処理済みです。`;
+});
+
+registerCommand("pending", async () => {
+  return approvalManager.formatPending();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -294,6 +319,17 @@ async function main() {
       },
     });
     logger.info("[Watchdog] 自動監視開始");
+  }
+
+  // MCPサーバー（環境変数MCP_TRANSPORT=stdio|tcp時）
+  if (process.env.MCP_TRANSPORT) {
+    startMcpServer();
+  }
+
+  // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
+  if (process.env.ENABLE_SUBCONSCIOUS === "true") {
+    subconscious.start();
+    logger.info("[Subconscious] バックグラウンド思考開始");
   }
 
   // 起動イベント発行
