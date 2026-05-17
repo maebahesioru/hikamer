@@ -211,6 +211,60 @@ registerCommand("context", async (args) => {
   return contextManager.formatStats();
 });
 
+registerCommand("kanban", async (args) => {
+  const { kanban } = await import("./kanban");
+  if (!args) return kanban.renderBoard();
+  const parts = args.split(" ");
+  const cmd = parts[0];
+  const rest = parts.slice(1).join(" ");
+  if (cmd === "add" && rest) {
+    const card = kanban.addCard("default", rest);
+    return card ? `✅ カード追加: "${rest}" (${card.id})` : "❌ カード追加失敗（WIP制限？）";
+  }
+  if (cmd === "move" && parts.length >= 3) {
+    const ok = kanban.moveCard("default", parts[1]!, parts[2]!);
+    return ok ? `✅ カード移動: ${parts[1]} → ${parts[2]}` : "❌ 移動失敗";
+  }
+  return kanban.renderBoard();
+});
+
+registerCommand("update", async (args) => {
+  const { autoUpdater } = await import("./auto-update");
+  if (args === "apply") {
+    const result = autoUpdater.applyUpdate();
+    if (result.success && result.restartRequired) {
+      setTimeout(() => autoUpdater.restart(), 2000);
+      return `${result.message}\n\n2秒後に再起動します…`;
+    }
+    return result.message;
+  }
+  return autoUpdater.formatInfo();
+});
+
+registerCommand("plugins", async () => {
+  const { pluginManager } = await import("./plugin-system");
+  return pluginManager.formatPlugins();
+});
+
+registerCommand("mail", async (args) => {
+  const { mailEngine } = await import("./email");
+  if (!args) return "メールコマンド: `/mail send <to> <subject> <body>`, `/mail inbox`";
+  const parts = args.split(" ");
+  if (parts[0] === "send" && parts.length >= 3) {
+    const to = parts[1]!;
+    const subject = parts[2]!;
+    const body = parts.slice(3).join(" ") || "(本文なし)";
+    const ok = await mailEngine.sendMail(to, subject, body);
+    return ok ? `✅ メール送信: ${subject} → ${to}` : `❌ 送信失敗`;
+  }
+  if (parts[0] === "inbox") {
+    const emails = await mailEngine.fetchInbox(5);
+    if (emails.length === 0) return "📬 新着メールはありません。";
+    return `📬 **受信箱**\n${emails.map(e => `• ${e.subject} from ${e.from}`).join("\n")}`;
+  }
+  return "不明なサブコマンド";
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
