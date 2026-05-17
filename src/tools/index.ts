@@ -19,5 +19,7 @@ import "./process";
 import "./send-message";
 import "./skills";
 import "./cron-manager";
+import "./file-state";
+import "./image-gen";
 
 export { toolRegistry } from "./registry";

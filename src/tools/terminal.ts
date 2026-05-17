@@ -10,6 +10,8 @@ import type { ToolDescriptor } from "../types";
 import { toolRegistry } from "./registry";
 import { cleanTerminalOutput } from "../ansi-strip";
 import { checkCommand } from "../approval";
+import { juiceOutput } from "../tokenjuice";
+import { logger } from "../utils/logger";
 
 const execAsync = promisify(exec);
 
@@ -66,7 +68,15 @@ const descriptor: ToolDescriptor = {
       else if (!stderr) output = stdout;
       else output = `${stdout}\n(stderr)\n${stderr}`;
 
-      return cleanTerminalOutput(output);
+      // Token Juiceでスマート圧縮（ANSI除去 + 定形出力圧縮）
+      output = cleanTerminalOutput(output);
+      const juiced = juiceOutput(command, output);
+      if (juiced.ruleId !== "passthrough" && juiced.ruleId !== "none") {
+        const saved = `${juiced.text}\n[TokenJuice: ${juiced.ruleId} ${juiced.originalLines}→${juiced.finalLines}行]`;
+        logger.debug(`TokenJuice適用: ${juiced.ruleId} (${juiced.originalLines}→${juiced.finalLines})`);
+        return saved;
+      }
+      return output;
     } catch (e: any) {
       const exitCode = e.code ?? "?";
       const msg = e.stderr || e.stdout || e.message || String(e);
