@@ -8,6 +8,7 @@ import { resolve } from "path";
 import "./tools/index";
 import { connectAllMcpServers } from "./tools/mcp-client";
 import { logger } from "./utils/logger";
+import { eventBus, createEvent } from "./event-bus";
 // DB初期化
 import "./db";
 
@@ -94,6 +95,12 @@ async function main() {
 
   // MCP自動接続
   await connectAllMcpServers();
+
+  // 起動イベント発行
+  eventBus.publish(createEvent("system", "startup", {
+    platforms: enabledPlatforms,
+    pid: process.pid,
+  }));
 
   logger.info("Aikata 起動完了 🎉");
   logger.info(" /provider /model /maxiter /models /providers /addprovider /delprovider /info");

@@ -5,6 +5,7 @@
 import { db } from "./db";
 import type { Message, MessageRow, ToolLogEntry } from "./types";
 import { logger } from "./utils/logger";
+import { compressHistory, needsCompression } from "./context-compressor";
 
 export function ensureConversation(id: string, title?: string, threadId?: string, platform?: string) {
   const existing = db.prepare("SELECT id FROM conversations WHERE id = ?").get(id) as any;
@@ -42,7 +43,38 @@ export function getHistory(conversationId: string, limit = 99999): Message[] {
     LIMIT ?
   `).all(conversationId, limit) as MessageRow[];
 
-  return rows.reverse().map(row => toMessage(row));
+  const messages = rows.reverse().map(row => toMessage(row));
+
+  // 自動コンテキスト圧縮（大量履歴がある場合のみ）
+  if (needsCompression(messages)) {
+    logger.info(`履歴圧縮実行前: ${conversationId} (${messages.length}メッセージ)`);
+    const { messages: compressed } = compressHistory(messages);
+
+    if (compressed.length < messages.length) {
+      // 圧縮した内容をDBに書き戻す
+      db.transaction(() => {
+        // 古いメッセージを削除
+        db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+        // 圧縮後を保存（システムプロンプトは除外）
+        for (const msg of compressed) {
+          db.prepare(`
+            INSERT INTO messages (conversation_id, role, content, tool_calls, tool_call_id)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(
+            conversationId,
+            msg.role,
+            msg.content,
+            msg.tool_calls ? JSON.stringify(msg.tool_calls) : null,
+            msg.tool_call_id || null,
+          );
+        }
+      })();
+
+      return compressed;
+    }
+  }
+
+  return messages;
 }
 
 export function saveMessage(conversationId: string, msg: Message): number {

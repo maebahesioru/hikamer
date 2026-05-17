@@ -5,6 +5,7 @@
 
 import type { Tool, ToolDescriptor } from "../types";
 import { logger } from "../utils/logger";
+import { trimToolResult } from "../budget-config";
 
 class ToolRegistry {
   private tools = new Map<string, ToolDescriptor>();
@@ -86,10 +87,11 @@ class ToolRegistry {
       const result = await tool.execute(args);
       const duration = Date.now() - start;
       this.afterHooks.forEach(fn => { try { fn(name, args, result, duration); } catch {} });
-      if (result.length > 50_000) {
-        return result.slice(0, 50_000) + `\n\n…（${result.length - 50_000}文字省略）`;
+      const trimmed = trimToolResult(name, result);
+      if (trimmed !== result) {
+        logger.debug(`結果トリム: ${name} ${result.length}→${trimmed.length}`);
       }
-      return result;
+      return trimmed;
     } catch (e: any) {
       const duration = Date.now() - start;
       const err = `[エラー] ${e.message || String(e)}`;

@@ -16,6 +16,8 @@ import {
 export interface AgentOptions {
   /** ストリーミング有効（デフォルトtrue） */
   streaming?: boolean;
+  /** 割り込み制御（AbortSignalで強制停止） */
+  signal?: AbortSignal;
   /** ストリーミングコールバック */
   onChunk?: (chunk: LLMChunk, accumulated: { reasoning: string; content: string }) => void;
   /** ツール実行開始コールバック */
@@ -36,7 +38,7 @@ export async function agentLoop(
   const toolLogs: ToolLogEntry[] = [];
   let iterations = 0;
   let allReasoning = "";
-  const { streaming = true, onChunk, onToolStart, onToolEnd } = options;
+  const { streaming = true, onChunk, onToolStart, onToolEnd, signal } = options;
 
   // 会話IDからプラットフォームを推測
   let platform = platformHint || "cli";
@@ -68,6 +70,17 @@ export async function agentLoop(
   while (iterations < runtimeConfig.maxIterations) {
     iterations++;
     logger.iteration(iterations);
+
+    // 割り込みチェック
+    if (signal?.aborted) {
+      logger.warn(`割り込み検出: ${iterations}反復目で中断`);
+      return {
+        response: "処理を中断しました（ユーザーによる割り込み）。",
+        iterations,
+        toolLogs,
+        reasoning: allReasoning || undefined,
+      };
+    }
 
     // Grace Call: 最終反復なら「これが最後」メッセージを注入
     if (iterations === runtimeConfig.maxIterations) {
@@ -231,6 +244,17 @@ export async function agentLoop(
         })),
       ];
       saveMessages(conversationId, newMessages);
+
+      // 割り込みチェック（長時間ツールからの帰還後）
+      if (signal?.aborted) {
+        logger.warn(`ツール実行後の割り込み: ${iterations}反復`);
+        return {
+          response: "処理を中断しました（ユーザーによる割り込み）。",
+          iterations,
+          toolLogs,
+          reasoning: allReasoning || undefined,
+        };
+      }
 
     } catch (e: any) {
       const ctx = iterations > 0
