@@ -266,10 +266,13 @@ function createProvider(entry: ProviderEntry, model: string, apiKey: string): LL
 
       logger.debug(`LLM Stream: ${entry.type}/${model}`);
 
-      const response = await fetch(finalUrl, {
-        method: "POST", headers, body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180_000),
-      });
+      // retry付きfetch（ストリーム接続前に429/500リトライ）
+      const response = await retryFetch(async () => {
+        return await fetch(finalUrl, {
+          method: "POST", headers, body: JSON.stringify(body),
+          signal: AbortSignal.timeout(180_000),
+        });
+      }, 3, 2000);
 
       if (!response.ok) {
         const errText = await response.text().catch(() => "unknown");

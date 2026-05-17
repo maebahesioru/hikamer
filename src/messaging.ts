@@ -599,10 +599,14 @@ export async function startDiscord(token: string): Promise<Client> {
         await sendReplyInThread(`🔍 **思考過程:**\n\`\`\`\n${postReasoning.slice(0, 1900)}\n\`\`\``);
       }
 
-      // 回答確定 or 送信
-      if (answerMsg && result.response && !result.response.startsWith("[致命的エラー]")) {
+      // 回答確定 or エラー送信
+      if (result.response.startsWith("[致命的エラー]")) {
+        // エラー時は❌リアクション + エラーメッセージをスレッドに送信
+        message.react("❌").catch(() => {});
+        await sendReplyInThread(`💀 **エラー:**\n${result.response.slice(9, 1900)}`);
+      } else if (answerMsg && result.response) {
         await answerMsg.edit(result.response.slice(0, 1950)).catch(() => {});
-      } else if (result.response && !result.response.startsWith("[致命的エラー]")) {
+      } else if (result.response) {
         await sendReplyInThread(result.response.slice(0, 1950));
       }
 
