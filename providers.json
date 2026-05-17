@@ -3,7 +3,7 @@
     "opencode": {
       "name": "OpenCode Go",
       "type": "openai",
-      "baseUrl": "http://localhost:8080"
+      "baseUrl": "https://opencode.ai/zen/go"
     },
     "crofai": {
       "name": "CrofAI",

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - コア型定義 (v1.1)
+// Aikata - コア型定義 (v1.2 - streaming + reasoning)
 // ==========================================
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
@@ -18,17 +18,30 @@ export interface Message {
   content: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** DeepSeek V4など推論モデルの思考過程 */
+  reasoning_content?: string;
 }
 
 export interface LLMResponse {
   content: string | null;
   tool_calls: ToolCall[] | null;
   finishReason: string;
+  /** 推論テキスト（DeepSeek V4等） */
+  reasoning_content?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    reasoningTokens?: number;
   };
+}
+
+/** ストリーミングチャンク */
+export interface LLMChunk {
+  content_delta: string;
+  reasoning_delta: string;
+  tool_calls: ToolCall[] | null;
+  finishReason: string | null;
 }
 
 export interface Tool {
@@ -42,12 +55,17 @@ export interface LLMProvider {
   readonly name: string;
   readonly model: string;
   chat(messages: Message[], tools: Tool[]): Promise<LLMResponse>;
+  /** ストリーミング対応 */
+  chatStream?(messages: Message[], tools: Tool[]): AsyncGenerator<LLMChunk>;
 }
 
 export interface AgentResult {
   response: string;
   iterations: number;
   toolLogs: ToolLogEntry[];
+  /** 全推論テキスト（蓄積） */
+  reasoning?: string;
+  /** スレッドタイトル */
   threadTitle?: string;
 }
 
@@ -72,3 +90,8 @@ export interface MessageRow {
 
 /** プラットフォーム種別 */
 export type Platform = "discord" | "telegram" | "cli";
+
+/** ストリーミング設定 */
+export interface StreamConfig {
+  enabled: boolean;
+}

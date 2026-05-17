@@ -3,12 +3,29 @@
 // ==========================================
 
 import "dotenv/config";
+import { writeFileSync, existsSync, mkdirSync } from "fs";
+import { resolve } from "path";
 import { registerAllTools } from "./tools/index";
 import { logger } from "./utils/logger";
 // DB初期化
 import "./db";
 
 registerAllTools();
+
+const DATA_DIR = process.env.DATA_DIR || "./data";
+const STATUS_PATH = resolve(DATA_DIR, "status.json");
+
+function writeStatus(running: boolean, extra: Record<string, unknown> = {}) {
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(STATUS_PATH, JSON.stringify({
+      running,
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      ...extra,
+    }, null, 2), "utf-8");
+  } catch {}
+}
 
 const enabledPlatforms = (process.env.ENABLED_PLATFORMS || "discord,telegram")
   .split(",").map(s => s.trim()).filter(Boolean);
@@ -32,7 +49,7 @@ async function deliverMessage(platform: string, chatId: string, message: string)
         await platformClients.telegram.api.sendMessage(chatId, chunk);
       }
     } else {
-      console.log(`\n[Cron] ${message}\n`);
+      process.stderr.write(`\n[Cron] ${message}\n`);
     }
   } catch (e: any) {
     logger.error(`配信失敗 (${platform}): ${e.message}`);
@@ -50,7 +67,7 @@ async function main() {
   if (enabledPlatforms.includes("discord")) {
     const token = process.env.DISCORD_TOKEN;
     if (token && token !== "your-discord-bot-token-here") {
-      const { startDiscord } = await import("./discord");
+      const { startDiscord } = await import("./messaging");
       const client = await startDiscord(token);
       platformClients.discord = client;
     } else {
@@ -61,7 +78,7 @@ async function main() {
   if (enabledPlatforms.includes("telegram")) {
     const token = process.env.TELEGRAM_TOKEN;
     if (token && token !== "your-telegram-bot-token-here") {
-      const { startTelegramBot } = await import("./telegram");
+      const { startTelegramBot } = await import("./messaging");
       const bot = await startTelegramBot(token);
       platformClients.telegram = bot;
     } else {
@@ -78,13 +95,22 @@ async function main() {
 
   logger.info("Aikata 起動完了 🎉");
   logger.info(" /provider /model /maxiter /models /providers /addprovider /delprovider /info");
-  logger.info(" /reset /jobs");
+  logger.info(" /reset /jobs /ping");
+
+  writeStatus(true, { platforms: enabledPlatforms });
 
   process.on("SIGINT", () => {
     logger.info("シャットダウン…");
+    writeStatus(false);
     if (platformClients.discord) platformClients.discord.destroy();
     if (platformClients.telegram) platformClients.telegram.stop();
     process.exit(0);
+  });
+
+  process.on("uncaughtException", (e) => {
+    logger.error(`未捕捉例外: ${e.message}`);
+    writeStatus(false, { error: e.message });
+    process.exit(1);
   });
 }
 

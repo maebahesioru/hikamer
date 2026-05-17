@@ -1,8 +1,8 @@
 // ==========================================
-// Aikata - LLMプロバイダー (v1.3 - apiKey分離 + AGENT_MODEL)
+// Aikata - LLMプロバイダー (v1.4 - retry + reasoning + streaming)
 // ==========================================
 
-import type { LLMProvider, LLMResponse, Message, Tool, ToolCall } from "../types";
+import type { LLMProvider, LLMResponse, LLMChunk, Message, Tool, ToolCall } from "../types";
 import { getProvider, getApiKey, getActiveModel, type ProviderEntry, type ProviderType } from "../utils/config";
 import { logger } from "../utils/logger";
 
@@ -62,10 +62,12 @@ function parseOpenAIResponse(json: any): LLMResponse {
     content: choice.message?.content || null,
     tool_calls: choice.message?.tool_calls || null,
     finishReason: choice.finish_reason || "stop",
+    reasoning_content: choice.message?.reasoning_content || undefined,
     usage: json.usage ? {
       promptTokens: json.usage.prompt_tokens,
       completionTokens: json.usage.completion_tokens,
       totalTokens: json.usage.total_tokens,
+      reasoningTokens: json.usage.completion_tokens_details?.reasoning_tokens,
     } : undefined,
   };
 }
@@ -136,6 +138,39 @@ function getModelsUrl(entry: ProviderEntry): string {
   }
 }
 
+// ==================== リトライロジック ====================
+
+async function retryFetch(
+  fn: () => Promise<Response>,
+  maxRetries = 3,
+  baseDelay = 1000,
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const res = await fn();
+      // 500系 or 429 → retry
+      if ((res.status >= 500 || res.status === 429) && i < maxRetries) {
+        const delay = baseDelay * Math.pow(2, i);
+        logger.warn(`API ${res.status} → ${delay}ms後にリトライ (${i + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (e: any) {
+      lastError = e;
+      if (i < maxRetries && (e.name === "TimeoutError" || e.message?.includes("fetch"))) {
+        const delay = baseDelay * Math.pow(2, i);
+        logger.warn(`API接続失敗 → ${delay}ms後にリトライ (${i + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError || new Error("リトライ上限到達");
+}
+
 // ==================== プロバイダー作成 ====================
 
 export function createActiveProvider(): LLMProvider {
@@ -160,14 +195,14 @@ function createProvider(entry: ProviderEntry, model: string, apiKey: string): LL
 
       switch (entry.type) {
         case "openai": {
-          body = { model, messages, temperature: 0.7, max_tokens: 4096 };
+          body = { model, messages, temperature: 0.7, max_tokens: 8192 };
           if (tools.length > 0) { body.tools = toOpenAITools(tools); body.tool_choice = "auto"; }
           headers["Authorization"] = `Bearer ${apiKey}`;
           break;
         }
         case "anthropic": {
           const c = messagesToAnthropic(messages);
-          body = { model, max_tokens: 4096, messages: c.messages, ...(c.system ? { system: c.system } : {}), ...(tools.length > 0 ? { tools: toOpenAITools(tools) } : {}) };
+          body = { model, max_tokens: 8192, messages: c.messages, ...(c.system ? { system: c.system } : {}), ...(tools.length > 0 ? { tools: toOpenAITools(tools) } : {}) };
           headers["x-api-key"] = apiKey;
           headers["anthropic-version"] = "2023-06-01";
           break;
@@ -183,10 +218,12 @@ function createProvider(entry: ProviderEntry, model: string, apiKey: string): LL
       logger.debug(`LLM: ${entry.type}/${model}`);
 
       const startTime = Date.now();
-      const response = await fetch(finalUrl, {
-        method: "POST", headers, body: JSON.stringify(body),
-        signal: AbortSignal.timeout(120_000),
-      });
+      const response = await retryFetch(() =>
+        fetch(finalUrl, {
+          method: "POST", headers, body: JSON.stringify(body),
+          signal: AbortSignal.timeout(120_000),
+        })
+      );
 
       const elapsed = Date.now() - startTime;
       if (!response.ok) {
@@ -203,8 +240,84 @@ function createProvider(entry: ProviderEntry, model: string, apiKey: string): LL
         default: result = parseOpenAIResponse(json);
       }
 
-      logger.debug(`LLM応答: ${elapsed}ms, finish=${result.finishReason}`);
+      logger.debug(`LLM応答: ${elapsed}ms, finish=${result.finishReason}, reasoning=${result.usage?.reasoningTokens || 0}t`);
       return result;
+    },
+
+    // ==================== ストリーミング ====================
+    async *chatStream(messages: Message[], tools: Tool[]): AsyncGenerator<LLMChunk> {
+      let body: any;
+      let headers: Record<string, string> = { "Content-Type": "application/json" };
+      let finalUrl = url;
+
+      switch (entry.type) {
+        case "openai": {
+          body = { model, messages, temperature: 0.7, max_tokens: 8192, stream: true };
+          if (tools.length > 0) { body.tools = toOpenAITools(tools); body.tool_choice = "auto"; }
+          headers["Authorization"] = `Bearer ${apiKey}`;
+          break;
+        }
+        default:
+          // 非OpenAI系は非ストリーミングにフォールバック
+          const result = await (createProvider(entry, model, apiKey)).chat(messages, tools);
+          yield { content_delta: result.content || "", reasoning_delta: result.reasoning_content || "", tool_calls: result.tool_calls, finishReason: result.finishReason };
+          return;
+      }
+
+      logger.debug(`LLM Stream: ${entry.type}/${model}`);
+
+      const response = await fetch(finalUrl, {
+        method: "POST", headers, body: JSON.stringify(body),
+        signal: AbortSignal.timeout(180_000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "unknown");
+        throw new Error(`LLM API エラー (${response.status}): ${errText.slice(0, 500)}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("ストリーム読み取り不可");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") {
+              yield { content_delta: "", reasoning_delta: "", tool_calls: null, finishReason: "stop" };
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const choice = parsed.choices?.[0];
+              if (!choice) continue;
+
+              const delta = choice.delta || {};
+              yield {
+                content_delta: delta.content || "",
+                reasoning_delta: delta.reasoning_content || "",
+                tool_calls: delta.tool_calls || null,
+                finishReason: choice.finish_reason || null,
+              };
+            } catch { /* skip malformed JSON */ }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     },
   };
 }

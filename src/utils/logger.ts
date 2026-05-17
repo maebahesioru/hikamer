@@ -30,32 +30,32 @@ function format(level: LogLevel, msg: string): string {
     warn: "⚠️",
     error: "💀",
   }[level];
-  return `${prefix} [${timestamp()}] ${msg}`;
+  return `${prefix} [${timestamp()}] ${msg}\n`;
 }
 
 export const logger = {
   debug(msg: string) {
-    if (shouldLog("debug")) console.debug(format("debug", msg));
+    if (shouldLog("debug")) process.stderr.write(format("debug", msg));
   },
   info(msg: string) {
-    if (shouldLog("info")) console.log(format("info", msg));
+    if (shouldLog("info")) process.stderr.write(format("info", msg));
   },
   warn(msg: string) {
-    if (shouldLog("warn")) console.warn(format("warn", msg));
+    if (shouldLog("warn")) process.stderr.write(format("warn", msg));
   },
   error(msg: string) {
-    if (shouldLog("error")) console.error(format("error", msg));
+    if (shouldLog("error")) process.stderr.write(format("error", msg));
   },
   tool(name: string, args: Record<string, unknown>) {
     if (shouldLog("debug")) {
       const argsStr = JSON.stringify(args);
       const truncated = argsStr.length > 100 ? argsStr.slice(0, 100) + "…" : argsStr;
-      console.debug(`  🔧 ${name}(${truncated})`);
+      process.stderr.write(format("debug", `🔧 ${name}(${truncated})`));
     }
   },
   iteration(n: number) {
     if (shouldLog("debug")) {
-      console.debug(`  🔄 反復 #${n}`);
+      process.stderr.write(format("debug", `🔄 反復 #${n}`));
     }
   },
 };

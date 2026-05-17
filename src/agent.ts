@@ -1,8 +1,8 @@
 // ==========================================
-// Aikata - エージェントループ v1.1
+// Aikata - エージェントループ v1.2 (streaming + reasoning)
 // ==========================================
 
-import type { AgentResult, LLMProvider, Message, ToolLogEntry } from "./types";
+import type { AgentResult, LLMProvider, LLMChunk, Message, ToolLogEntry } from "./types";
 import { toolRegistry } from "./tools/registry";
 import { getRuntimeConfig } from "./utils/config";
 import { logger } from "./utils/logger";
@@ -13,16 +13,30 @@ import {
   logToolCall,
 } from "./repo";
 
+export interface AgentOptions {
+  /** ストリーミング有効（デフォルトtrue） */
+  streaming?: boolean;
+  /** ストリーミングコールバック */
+  onChunk?: (chunk: LLMChunk, accumulated: { reasoning: string; content: string }) => void;
+  /** ツール実行開始コールバック */
+  onToolStart?: (toolName: string, args: Record<string, unknown>) => void;
+  /** ツール実行完了コールバック */
+  onToolEnd?: (toolName: string, result: string, durationMs: number) => void;
+}
+
 export async function agentLoop(
   provider: LLMProvider,
   systemPrompt: string,
   userMessage: string,
   conversationId: string,
   platformHint?: string,
+  options: AgentOptions = {},
 ): Promise<AgentResult> {
   const runtimeConfig = getRuntimeConfig();
   const toolLogs: ToolLogEntry[] = [];
   let iterations = 0;
+  let allReasoning = "";
+  const { streaming = true, onChunk, onToolStart, onToolEnd } = options;
 
   // 会話IDからプラットフォームを推測
   let platform = platformHint || "cli";
@@ -38,7 +52,7 @@ export async function agentLoop(
 
   ensureConversation(conversationId);
 
-  // 全履歴を復元（トリミングなし、永続保存）
+  // 全履歴を復元
   const pastHistory = getHistory(conversationId, 99999);
 
   const messages: Message[] = [
@@ -58,41 +72,130 @@ export async function agentLoop(
     const tools = toolRegistry.getOpenAISchema();
 
     try {
-      const response = await provider.chat(messages, tools);
+      // ストリーミング有効ならストリーミング（ツールありでもOK）
+      const useStream = streaming && !!provider.chatStream;
+      
+      let response: { content: string | null; tool_calls: any[] | null; finishReason: string; reasoning_content?: string };
+      let partialContent = ""; // catchで参照できるようtryスコープに
+
+      if (useStream) {
+        // ストリーミングモード — ツール呼び出しはチャンク間で蓄積マージが必要
+        let contentAcc = "";
+        let reasoningAcc = "";
+        let finishReason = "stop";
+        let streamToolCalls: Map<number, any> = new Map(); // index → merged tool_call
+
+        for await (const chunk of provider.chatStream!(messages, tools)) {
+          contentAcc += chunk.content_delta;
+          reasoningAcc += chunk.reasoning_delta;
+          partialContent = contentAcc;
+          if (chunk.finishReason) finishReason = chunk.finishReason;
+
+          // ツール呼び出しをチャンク間で蓄積マージ
+          if (chunk.tool_calls) {
+            for (const tc of chunk.tool_calls) {
+              const idx = tc.index ?? 0;
+              const existing = streamToolCalls.get(idx);
+              if (existing) {
+                // arguments を追記
+                if (tc.function?.arguments) {
+                  existing.function.arguments += tc.function.arguments;
+                }
+                // id / name は最初のチャンクで設定済みなので上書き不要
+              } else {
+                // 新規ツール呼び出し
+                streamToolCalls.set(idx, {
+                  id: tc.id || "",
+                  type: "function",
+                  function: {
+                    name: tc.function?.name || "",
+                    arguments: tc.function?.arguments || "",
+                  },
+                });
+              }
+            }
+          }
+
+          if (onChunk) {
+            onChunk(chunk, { reasoning: reasoningAcc, content: contentAcc });
+          }
+        }
+
+        allReasoning += reasoningAcc;
+        const mergedToolCalls = Array.from(streamToolCalls.values());
+        response = {
+          content: contentAcc || null,
+          tool_calls: mergedToolCalls.length > 0 ? mergedToolCalls : null,
+          finishReason,
+          reasoning_content: reasoningAcc,
+        };
+      } else {
+        // 通常モード
+        const llmResponse = await provider.chat(messages, tools);
+
+        if (llmResponse.reasoning_content) {
+          allReasoning += llmResponse.reasoning_content;
+        }
+
+        response = {
+          content: llmResponse.content,
+          tool_calls: llmResponse.tool_calls,
+          finishReason: llmResponse.finishReason,
+          reasoning_content: llmResponse.reasoning_content,
+        };
+      }
 
       // テキスト応答のみ → 終了
       if (response.content && (!response.tool_calls || response.tool_calls.length === 0)) {
         saveMessages(conversationId, [
-          { role: "assistant", content: response.content },
+          { role: "assistant", content: response.content, reasoning_content: response.reasoning_content },
         ]);
-        // ★ トリミングしない（永続保存）
-        logger.info(`エージェント完了: ${iterations}反復, ${response.usage?.totalTokens || "?"}トークン`);
-        return { response: response.content, iterations, toolLogs };
+        logger.info(`エージェント完了: ${iterations}反復`);
+        return {
+          response: response.content,
+          iterations,
+          toolLogs,
+          reasoning: allReasoning || undefined,
+        };
       }
 
       const assistantMsg: Message = {
         role: "assistant",
         content: response.content || "",
         tool_calls: response.tool_calls || [],
+        reasoning_content: response.reasoning_content,
       };
       messages.push(assistantMsg);
 
       if (!response.tool_calls || response.tool_calls.length === 0) {
         saveMessages(conversationId, [assistantMsg]);
         logger.warn("空応答で終了");
-        return { response: response.content || "（応答なし）", iterations, toolLogs };
+        return {
+          response: response.content || "（応答なし）",
+          iterations,
+          toolLogs,
+          reasoning: allReasoning || undefined,
+        };
       }
 
       for (const tc of response.tool_calls) {
         const toolName = tc.function.name;
-        const args = JSON.parse(tc.function.arguments || "{}");
+        let args: Record<string, unknown>;
+        try {
+          args = JSON.parse(tc.function.arguments || "{}");
+        } catch (parseErr: any) {
+          logger.warn(`⚠️ ツール引数JSONパース失敗 (${toolName}): ${parseErr.message} → raw="${(tc.function.arguments || "").slice(0, 200)}"`);
+          args = {};
+        }
         args._conversation_id = conversationId;
         args._platform = platform;
         args._chat_id = chatId;
 
         const startTime = Date.now();
+        onToolStart?.(toolName, args);
         const result = await toolRegistry.execute(toolName, args);
         const duration = Date.now() - startTime;
+        onToolEnd?.(toolName, result, duration);
         const success = !result.startsWith("[エラー]");
 
         const entry: ToolLogEntry = {
@@ -124,9 +227,18 @@ export async function agentLoop(
       saveMessages(conversationId, newMessages);
 
     } catch (e: any) {
+      const ctx = iterations > 0
+        ? `反復=${iterations}, content=${partialContent.slice(0, 100)}`
+        : "初回呼び出し時";
       const errorMsg = `[致命的エラー] ${e.message || String(e)}`;
-      logger.error(errorMsg);
-      return { response: errorMsg, iterations, toolLogs };
+      logger.error(`💀 ${errorMsg} (${ctx})`);
+      if (e.stack) logger.debug(e.stack);
+      return {
+        response: errorMsg,
+        iterations,
+        toolLogs,
+        reasoning: allReasoning || undefined,
+      };
     }
   }
 
@@ -135,5 +247,6 @@ export async function agentLoop(
     response: `最大反復回数（${runtimeConfig.maxIterations}回）に達したため処理を中断しました。\n/maxiter で上限を変更できます。`,
     iterations,
     toolLogs,
+    reasoning: allReasoning || undefined,
   };
 }
