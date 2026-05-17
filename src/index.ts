@@ -308,6 +308,35 @@ registerCommand("contacts", async (args) => {
   return contactManager.formatContacts(contactManager.search(args));
 });
 
+registerCommand("sandbox", async () => {
+  const { getSandboxCapabilities } = await import("./sandbox");
+  const caps = getSandboxCapabilities();
+  return `🛡️ **サンドボックス能力**\n利用可能: ${caps.length > 0 ? caps.join(", ") : "なし (直接実行)"}\n環境変数 SANDBOX_TYPE で指定: bubblewrap/firejail/docker/tempdir`;
+});
+
+registerCommand("usage", async () => {
+  const { billingManager } = await import("./billing");
+  return billingManager.formatUsage("default");
+});
+
+registerCommand("learn", async (args) => {
+  const { learningEngine } = await import("./learning");
+  if (!args) return learningEngine.formatStats();
+  return "学習: `/learn` で状態表示。";
+});
+
+registerCommand("config", async (args) => {
+  const { configManager } = await import("./config-manager");
+  if (!args) return configManager.formatConfig();
+  const eqIdx = args.indexOf("=");
+  if (eqIdx > 0) {
+    const key = args.slice(0, eqIdx).trim();
+    const value = args.slice(eqIdx + 1).trim();
+    return configManager.set(key, value) ? `✅ 設定: ${key} = ${value}` : "❌ 設定失敗";
+  }
+  return configManager.formatConfig();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -378,8 +407,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.13 起動中…");
-  logger.info(" ScreenOCR / Embeddings / SessionManager / SelfHealer / Contacts");
+  logger.info(" Aikata v1.14 起動中…");
+  logger.info(" Sandbox / ConfigManager / CodeSandbox / Billing / Learning");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
