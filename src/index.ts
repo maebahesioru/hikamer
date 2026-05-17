@@ -427,6 +427,30 @@ registerCommand("sched", async (args) => {
   return schedulerV2.formatTasks();
 });
 
+registerCommand("state", async () => {
+  const { appState } = await import("./app-state");
+  return appState.formatState();
+});
+
+registerCommand("migrate", async (args) => {
+  const { migrationManager } = await import("./migrations");
+  if (args === "run") {
+    const result = migrationManager.runPending();
+    return `🗄️ マイグレーション: ${result.executed}実行, ${result.errors.length}エラー${result.errors.length > 0 ? "\n" + result.errors.join("\n") : ""}`;
+  }
+  return migrationManager.formatStatus();
+});
+
+registerCommand("caps", async () => {
+  const { capabilityRegistry } = await import("./capabilities");
+  return capabilityRegistry.formatCapabilities();
+});
+
+registerCommand("service", async () => {
+  const { serviceManager } = await import("./service");
+  return serviceManager.formatStatus();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
