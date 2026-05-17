@@ -11,5 +11,6 @@ import "./browser";
 import "./schedule";
 import "./sqlite";
 import "./memory";
+import "./delegate";
 
 export { toolRegistry } from "./registry";
