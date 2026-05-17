@@ -14,5 +14,7 @@ import "./memory";
 import "./delegate";
 import "./search";
 import "./export";
+import "./web-fetch";
+import "./process";
 
 export { toolRegistry } from "./registry";

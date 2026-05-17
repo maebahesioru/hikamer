@@ -1,5 +1,6 @@
 // ==========================================
 // Aikata - ターミナル実行ツール
+// ANSI除去 + 危険コマンド検出対応
 // ==========================================
 
 import { exec } from "child_process";
@@ -8,6 +9,7 @@ import { platform } from "os";
 import type { ToolDescriptor } from "../types";
 import { toolRegistry } from "./registry";
 import { cleanTerminalOutput } from "../ansi-strip";
+import { checkCommand } from "../approval";
 
 const execAsync = promisify(exec);
 
@@ -17,7 +19,7 @@ const descriptor: ToolDescriptor = {
   name: "terminal",
   emoji: "💻",
   owner: "core",
-  description: `シェルコマンドを実行します。${isWindows ? "Windows (cmd.exe)" : "Linux (bash)"} 環境です。`,
+  description: `シェルコマンドを実行します。${isWindows ? "Windows (cmd.exe)" : "Linux (bash)"} 環境です。危険コマンド自動検出対応。`,
   parameters: {
     type: "object",
     properties: {
@@ -41,6 +43,13 @@ const descriptor: ToolDescriptor = {
     const command = args.command as string;
     const timeout = Math.min((args.timeout as number) || 30000, 300_000);
     const workdir = args.workdir as string | undefined;
+
+    // 危険コマンドチェック
+    const check = checkCommand(command);
+    if (!check.safe) {
+      return `[ブロック] ${check.message}` +
+        (check.matchedPattern ? `\nマッチ: /${check.matchedPattern.slice(0, 100)}/` : "");
+    }
 
     try {
       const { stdout, stderr } = await execAsync(command, {
