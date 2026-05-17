@@ -140,6 +140,14 @@ function getModelsUrl(entry: ProviderEntry): string {
 
 // ==================== リトライロジック ====================
 
+/** リトライ時の通知コールバック（messaging.tsからセット→Discord表示） */
+export let onRetry: ((msg: string) => void) | null = null;
+
+/** リトライコールバックをセット（必ず使い終わったらnullに戻す） */
+export function setOnRetry(fn: ((msg: string) => void) | null): void {
+  onRetry = fn;
+}
+
 async function retryFetch(
   fn: () => Promise<Response>,
   maxRetries = 3,
@@ -152,7 +160,9 @@ async function retryFetch(
       // 500系 or 429 → retry
       if ((res.status >= 500 || res.status === 429) && i < maxRetries) {
         const delay = baseDelay * Math.pow(2, i);
-        logger.warn(`API ${res.status} → ${delay}ms後にリトライ (${i + 1}/${maxRetries})`);
+        const msg = `⏳ APIエラー(${res.status}) ${delay/1000}秒後にリトライ (${i + 1}/${maxRetries})`;
+        logger.warn(msg);
+        onRetry?.(msg);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
@@ -161,7 +171,9 @@ async function retryFetch(
       lastError = e;
       if (i < maxRetries && (e.name === "TimeoutError" || e.message?.includes("fetch"))) {
         const delay = baseDelay * Math.pow(2, i);
-        logger.warn(`API接続失敗 → ${delay}ms後にリトライ (${i + 1}/${maxRetries})`);
+        const msg = `⏳ API接続失敗  ${delay/1000}秒後にリトライ (${i + 1}/${maxRetries})`;
+        logger.warn(msg);
+        onRetry?.(msg);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }

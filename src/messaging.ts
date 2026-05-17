@@ -14,7 +14,7 @@ import {
   getRuntimeConfig, setMaxIterations,
   type ProviderType,
 } from "./utils/config";
-import { createActiveProvider, fetchModels } from "./providers/base";
+import { createActiveProvider, fetchModels, setOnRetry } from "./providers/base";
 import type { LLMProvider, LLMChunk } from "./types";
 
 // ==================== 共通: プロバイダー管理 ====================
@@ -578,10 +578,15 @@ export async function startDiscord(token: string): Promise<Client> {
         onToolEnd: undefined,
       };
 
+      // リトライ通知をスレッドに表示
+      setOnRetry((msg) => { sendInThread(msg).catch(() => {}); });
+
       const result = await agentLoop(
         provider, SYSTEM_PROMPT, cleanContent || "こんにちは",
         threadId || cid, "discord", options,
       );
+
+      setOnRetry(null); // クリア（次の呼び出しでリセット）
 
       // ========== 最終確定 ==========
       if (typingInterval) { clearInterval(typingInterval); typingInterval = null; }
@@ -629,10 +634,12 @@ export async function startDiscord(token: string): Promise<Client> {
 
       logger.info(`Discord応答: ${threadId || cid} (${result.iterations}反復)`);
     } catch (e: any) {
+      setOnRetry(null);
       logger.error(`Discordエラー: ${e.message}`);
       const errMsg = `💀 エラー: ${e.message.slice(0, 1800)}`;
       try { sendInThread(errMsg).catch(() => {}); } catch {}
     } finally {
+      setOnRetry(null);
       if (typingInterval) clearInterval(typingInterval);
       processing.delete(lockKey);
     }
