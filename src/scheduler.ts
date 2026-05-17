@@ -5,7 +5,7 @@
 import * as cron from "node-cron";
 import { getEnabledCronJobs, updateCronJobLastRun } from "./repo";
 import { agentLoop } from "./agent";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import { logger } from "./utils/logger";
 import type { LLMProvider } from "./types";
 
@@ -54,7 +54,7 @@ function refreshJobs(deps: SchedulerDeps): void {
       try {
         const result = await agentLoop(
           deps.provider,
-          SYSTEM_PROMPT,
+          buildSystemPrompt(),
           job.prompt,
           job.conversation_id
         );

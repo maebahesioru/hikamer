@@ -10,5 +10,6 @@ import "./code";
 import "./browser";
 import "./schedule";
 import "./sqlite";
+import "./memory";
 
 export { toolRegistry } from "./registry";

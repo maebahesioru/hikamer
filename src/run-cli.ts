@@ -5,7 +5,7 @@
 import { createInterface } from "readline";
 import "./tools/index"; // 自己登録
 import { agentLoop } from "./agent";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import { logger } from "./utils/logger";
 import { resetConversation } from "./repo";
 import {
@@ -106,7 +106,7 @@ rl.on("line", async (line) => {
   if (running) { logger.warn("処理中。"); rl.prompt(); return; }
   running = true;
   try {
-    const result = await agentLoop(provider, SYSTEM_PROMPT, input, cid, "cli");
+    const result = await agentLoop(provider, buildSystemPrompt(), input, cid, "cli");
     console.log(`\n🤖 Aikata:\n${result.response}`);
     console.log(`\n(${result.iterations}反復, ${result.toolLogs.length}ツール)`);
   } catch (e: any) { logger.error(`エラー: ${e.message}`); }

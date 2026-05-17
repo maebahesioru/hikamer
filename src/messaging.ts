@@ -5,7 +5,7 @@
 import { Client, Events, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes } from "discord.js";
 import { Bot } from "grammy";
 import { agentLoop, type AgentOptions } from "./agent";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt, SYSTEM_PROMPT } from "./system-prompt";
 import { resetConversation, updateConversationTitle, getConversationThreadId, listCronJobs } from "./repo";
 import { logger } from "./utils/logger";
 import {
@@ -603,7 +603,7 @@ export async function startDiscord(token: string): Promise<Client> {
       setOnRetry((msg) => { sendInThread(msg).catch(() => {}); });
 
       const result = await agentLoop(
-        provider, SYSTEM_PROMPT, cleanContent || "こんにちは",
+        provider, buildSystemPrompt(), cleanContent || "こんにちは",
         threadId || cid, "discord", options,
       );
 
@@ -790,7 +790,7 @@ export async function startTelegramBot(
     const thinking = await ctx.reply("考え中…");
 
     try {
-      const result = await agentLoop(provider, SYSTEM_PROMPT, ctx.message.text, cid, "telegram");
+      const result = await agentLoop(provider, buildSystemPrompt(), ctx.message.text, cid, "telegram");
 
       if (result.response.length <= 4000) {
         await ctx.api.editMessageText(chatId, thinking.message_id, result.response);
