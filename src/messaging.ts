@@ -461,9 +461,12 @@ export async function startDiscord(token: string): Promise<Client> {
       async function sendInThread(text: string): Promise<any> {
         if (!text) return null;
         const target = await getThreadChannel();
+        // スレッドがあればスレッドに送信
         if (target && "send" in target) return (target as any).send({ content: text.slice(0, 1950), ...noEmbed });
+        // DM/スレッド内なら元チャンネルに送信
         if (isThread || isDM) return message.channel.send({ content: text.slice(0, 1950), ...noEmbed }).catch(() => null);
-        return null;
+        // 最後の手段：エラー時だけ元チャンネルに送信（失敗なら諦める）
+        return message.channel.send({ content: text.slice(0, 1950), ...noEmbed }).catch(() => null);
       }
 
       // スレッド内では返信形式不可（クロスチャンネルNG）→ sendInThreadに一本化
