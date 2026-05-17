@@ -69,6 +69,12 @@ export async function agentLoop(
     iterations++;
     logger.iteration(iterations);
 
+    // Grace Call: 最終反復なら「これが最後」メッセージを注入
+    if (iterations === runtimeConfig.maxIterations) {
+      const graceMsg = "[システム] これが最後の応答チャンスです。ツールは呼ばずに、テキストだけで直接回答してください。";
+      messages.push({ role: "user", content: graceMsg });
+    }
+
     const tools = toolRegistry.getOpenAISchema();
 
     try {

@@ -8,6 +8,18 @@ import { logger } from "../utils/logger";
 
 class ToolRegistry {
   private tools = new Map<string, ToolDescriptor>();
+  private beforeHooks: Array<(name: string, args: Record<string, unknown>) => void> = [];
+  private afterHooks: Array<(name: string, args: Record<string, unknown>, result: string, durationMs: number) => void> = [];
+
+  /** ツール実行前フック登録 */
+  onBeforeToolCall(fn: (name: string, args: Record<string, unknown>) => void): void {
+    this.beforeHooks.push(fn);
+  }
+
+  /** ツール実行後フック登録 */
+  onAfterToolCall(fn: (name: string, args: Record<string, unknown>, result: string, durationMs: number) => void): void {
+    this.afterHooks.push(fn);
+  }
 
   /** ツールの自己登録（各ツールファイルがimport時に呼ぶ） */
   register(descriptor: ToolDescriptor): void {
@@ -68,14 +80,21 @@ class ToolRegistry {
       return `[エラー] ツール '${name}' は登録されていません。`;
     }
     logger.tool(name, args);
+    this.beforeHooks.forEach(fn => { try { fn(name, args); } catch {} });
+    const start = Date.now();
     try {
       const result = await tool.execute(args);
+      const duration = Date.now() - start;
+      this.afterHooks.forEach(fn => { try { fn(name, args, result, duration); } catch {} });
       if (result.length > 50_000) {
         return result.slice(0, 50_000) + `\n\n…（${result.length - 50_000}文字省略）`;
       }
       return result;
     } catch (e: any) {
-      return `[エラー] ${e.message || String(e)}`;
+      const duration = Date.now() - start;
+      const err = `[エラー] ${e.message || String(e)}`;
+      this.afterHooks.forEach(fn => { try { fn(name, args, err, duration); } catch {} });
+      return err;
     }
   }
 }
