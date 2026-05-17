@@ -2,6 +2,7 @@
 // Aikata - ブラウザ操作 v2 (camofox実API + playwright-fallback)
 // camofox: tabベース (POST /tabs → /tabs/:id/navigate etc.)
 // playwright: 直接操作 (camofox未起動時の自動フォールバック)
+// UAローテーション対応: ClaudeWeb等で規制回避
 // ==========================================
 
 import type { ToolDescriptor } from "../types";
@@ -10,6 +11,73 @@ import { logger } from "../utils/logger";
 import { checkUrlSafety } from "../url-safety";
 
 const CAMOFOX_URL = process.env.CAMOFOX_URL || "http://localhost:9377";
+
+// ==================== UAプリセット ====================
+
+const UA_PRESETS: Record<string, string> = {
+  /** デフォルト: 普通のChrome 131 Windows */
+  default: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+
+  /** ClaudeWeb: Anthropic Claude Web クライアントUA → 規制緩和されてることがある */
+  claude: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 ClaudeWeb/1.0",
+
+  /** ClaudeDesktop: Claude デスクトップアプリ */
+  claude_desktop: "ClaudeDesktop/1.0 (Windows NT 10.0; Win64; x64)",
+
+  /** GPTBot: OpenAI GPT クローラー → 多くのサイトが許可 */
+  ai: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 GPTBot/1.0",
+
+  /** ChatGPT-User: ChatGPT ユーザーエージェント */
+  chatgpt: "Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)",
+
+  /** Googlebot: Google 検索クローラー → ブロックされにくい */
+  googlebot: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+
+  /** Mobile Safari: iOS Safari → モバイル最適化サイト向け */
+  mobile: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+
+  /** Mobile Chrome Android */
+  mobile_android: "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.135 Mobile Safari/537.36",
+
+  /** Edge: たまにUAブロックがあるサイト向け */
+  edge: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+
+  /** Firefox: 特定のGecko-onlyサイト向け */
+  firefox: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+};
+
+/** フォールバック順序（UAごとに試行） */
+const UA_FALLBACK_CHAIN = ["default", "mobile", "googlebot", "ai", "claude", "firefox", "edge"];
+
+/** UA名から実際のUA文字列を解決 */
+function resolveUserAgent(name?: string): string {
+  const uaName = name || "default";
+  if (uaName === "default") return UA_PRESETS["default"]!;
+  const found: string | undefined = UA_PRESETS[uaName];
+  return found !== undefined ? found : UA_PRESETS["default"]!;
+}
+
+/** フォールバック用のUAリストを生成（指定UAを先頭に） */
+function buildFallbackUaChain(name?: string): string[] {
+  const seen = new Set<string>();
+  const chain: string[] = [];
+
+  // 指定UAを先頭に
+  const primary = resolveUserAgent(name);
+  seen.add(primary);
+  chain.push(primary);
+
+  // フォールバックチェーンを追加
+  for (const key of UA_FALLBACK_CHAIN) {
+    const ua = UA_PRESETS[key]!;
+    if (!seen.has(ua)) {
+      seen.add(ua);
+      chain.push(ua);
+    }
+  }
+
+  return chain;
+}
 
 // camofox死活キャッシュ（初回のみcheck、以降スキップ）
 let camofoxAlive: boolean | null = null;
@@ -150,8 +218,11 @@ async function camofoxClose(): Promise<void> {
 
 let playwrightBrowser: any = null;
 let playwrightPage: any = null;
+let currentUa = UA_PRESETS.default;
 
-async function getPlaywrightPage(): Promise<any> {
+async function getPlaywrightPage(ua?: string): Promise<any> {
+  const targetUa = resolveUserAgent(ua);
+
   if (!playwrightBrowser) {
     const { chromium } = await import("playwright-extra");
     const { default: StealthPlugin } = await import("puppeteer-extra-plugin-stealth") as any;
@@ -160,34 +231,64 @@ async function getPlaywrightPage(): Promise<any> {
       headless: true,
       args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"],
     });
+    currentUa = targetUa;
   }
-  if (!playwrightPage || playwrightPage.isClosed()) {
+
+  // UAが変わったら新しいコンテキストを作成
+  if (currentUa !== targetUa || !playwrightPage || playwrightPage.isClosed()) {
+    if (playwrightPage && !playwrightPage.isClosed()) {
+      try { await playwrightPage.context().close(); } catch {}
+    }
+    currentUa = targetUa;
     playwrightPage = await (await playwrightBrowser.newContext({
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      userAgent: targetUa,
       viewport: { width: 1280, height: 800 },
     })).newPage();
+    logger.info(`UA切替: ${ua || "default"}`);
   }
+
   return playwrightPage;
 }
 
 async function fallbackPlaywright(args: Record<string, unknown>): Promise<string> {
   const action = args.action as string;
-  const page = await getPlaywrightPage();
+  const requestedUa = (args.user_agent as string) || "default";
 
-  switch (action) {
-    case "navigate": {
-      const url = args.url as string;
-      if (!url) return "[Playwright] url が必要";
-      // URL安全チェック
-      const safety = await checkUrlSafety(url);
-      if (!safety.safe) {
-        return `[エラー] URLがブロックされました: ${safety.reason}`;
-      }
-      await page.goto(url, { timeout: 30_000, waitUntil: "domcontentloaded" });
-      const title = await page.title();
-      const text = await page.evaluate(() => document.body.innerText.slice(0, 10_000));
-      return `[Playwright] ナビゲート: ${url}\nタイトル: ${title}\n\n${text}`;
+  // navigateのみUAフォールバック対応
+  if (action === "navigate") {
+    const url = args.url as string;
+    if (!url) return "[Playwright] url が必要";
+
+    // URL安全チェック
+    const safety = await checkUrlSafety(url);
+    if (!safety.safe) {
+      return `[エラー] URLがブロックされました: ${safety.reason}`;
     }
+
+    // UAフォールバックチェーンで試行
+    const uasToTry = buildFallbackUaChain(requestedUa);
+    const errors: string[] = [];
+
+    for (const ua of uasToTry) {
+      try {
+        const page = await getPlaywrightPage(ua);
+        await page.goto(url, { timeout: 30_000, waitUntil: "domcontentloaded" });
+        const title = await page.title();
+        const text = await page.evaluate(() => document.body.innerText.slice(0, 10_000));
+        return `[Playwright] ナビゲート: ${url}\nタイトル: ${title}\n` +
+          (ua !== resolveUserAgent(requestedUa) ? `UAフォールバック: ${ua}\n` : "") +
+          `\n${text}`;
+      } catch (e: any) {
+        errors.push(`${ua}: ${e.message.slice(0, 100)}`);
+      }
+    }
+
+    return `[エラー] 全UAでナビゲート失敗:\n${errors.join("\n")}`;
+  }
+
+  // navigate以外は通常のswitch
+  const page = await getPlaywrightPage(requestedUa);
+  switch (action) {
     case "extract": {
       const title = await page.title();
       const text = await page.evaluate(() => document.body.innerText.slice(0, 15_000));
