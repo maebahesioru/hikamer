@@ -17,10 +17,12 @@ export function ensureFts5Table(): void {
   ).get();
   if (!hasMessages) return;
 
+  // 古い外部コンテンツモードのテーブルがあれば再作成
+  db.exec(`DROP TABLE IF EXISTS messages_fts`);
+
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
       content, tool_name, tool_calls,
-      content='messages', content_rowid='id',
       tokenize='unicode61'
     );
   `);
@@ -33,17 +35,17 @@ export function ensureFts5Table(): void {
     db.exec(`
       CREATE TRIGGER IF NOT EXISTS messages_ftsi AFTER INSERT ON messages BEGIN
         INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, '', COALESCE(new.tool_calls, ''));
+        VALUES (new.id, new.content, new.role, COALESCE(new.tool_calls, ''));
       END;
       CREATE TRIGGER IF NOT EXISTS messages_ftsd AFTER DELETE ON messages BEGIN
         INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, '', COALESCE(old.tool_calls, ''));
+        VALUES ('delete', old.id, old.content, old.role, COALESCE(old.tool_calls, ''));
       END;
       CREATE TRIGGER IF NOT EXISTS messages_ftsu AFTER UPDATE ON messages BEGIN
         INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, '', COALESCE(old.tool_calls, ''));
+        VALUES ('delete', old.id, old.content, old.role, COALESCE(old.tool_calls, ''));
         INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, '', COALESCE(new.tool_calls, ''));
+        VALUES (new.id, new.content, new.role, COALESCE(new.tool_calls, ''));
       END;
     `);
     logger.info("FTS5トリガー作成完了");
@@ -57,7 +59,7 @@ export function backfillFts5(): number {
   ensureFts5Table();
   const count = db.prepare(`
     INSERT OR IGNORE INTO messages_fts(rowid, content, tool_name, tool_calls)
-    SELECT id, content, '', COALESCE(tool_calls, '') FROM messages
+    SELECT id, content, role, COALESCE(tool_calls, '') FROM messages
     WHERE id NOT IN (SELECT rowid FROM messages_fts)
   `).run().changes;
   if (count > 0) logger.info(`FTS5バックフィル: ${count}件`);
