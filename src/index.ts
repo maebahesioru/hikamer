@@ -381,6 +381,52 @@ registerCommand("supervisor", async (args) => {
   return supervisor.formatStatus();
 });
 
+registerCommand("url", async (args) => {
+  const { urlManager } = await import("./url-manager");
+  if (!args) return urlManager.formatLinks(Array.from(urlManager["shortLinks"].values()));
+  const parts = args.split(" ");
+  if (parts[0] === "shorten" && parts[1]) {
+    const link = urlManager.shorten(parts[1]!, "user", { title: parts.slice(2).join(" ") || undefined });
+    return `🔗 短縮: \`${link.code}\` → ${parts[1]}`;
+  }
+  if (parts[0] === "resolve" && parts[1]) {
+    const link = urlManager.resolve(parts[1]!);
+    return link ? `🔗 \`${link.code}\` → ${link.url} (${link.clickCount}クリック)` : "❌ コード無効";
+  }
+  return urlManager.formatLinks(urlManager.searchByTag(args));
+});
+
+registerCommand("suggest", async (args) => {
+  const { autocomplete } = await import("./autocomplete");
+  if (!args) return `💡 **人気コマンド**: ${autocomplete.getPopularCommands().join(", ")}`;
+  return autocomplete.formatSuggestions(args);
+});
+
+registerCommand("invite", async (args) => {
+  const { referralManager } = await import("./referral");
+  if (!args) {
+    const invite = referralManager.createInvite("user");
+    return `📨 招待コード: \`${invite.code}\`\n有効期限: ${invite.maxUses}回`;
+  }
+  if (args.startsWith("use ")) {
+    const result = referralManager.useInvite(args.slice(4), "user");
+    return result.valid ? "✅ 招待コード使用成功" : `❌ ${result.reason}`;
+  }
+  return referralManager.formatInvites(referralManager.getMyInvites("user"));
+});
+
+registerCommand("profile", async (args) => {
+  const { peopleManager } = await import("./people");
+  const profile = peopleManager.getOrCreate("user", "discord", args || "User");
+  return peopleManager.formatProfile(profile);
+});
+
+registerCommand("sched", async (args) => {
+  const { schedulerV2 } = await import("./scheduler-v2");
+  if (!args) return schedulerV2.formatTasks();
+  return schedulerV2.formatTasks();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -451,8 +497,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.15 起動中…");
-  logger.info(" FeatureFlags / Obsidian / Supervisor / REST API / Platform");
+  logger.info(" Aikata v1.16 起動中…");
+  logger.info(" URLManager / Autocomplete / People / Referral / SchedulerV2 / LocalAI / Bugfixes");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 

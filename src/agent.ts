@@ -95,7 +95,7 @@ export async function agentLoop(
       const useStream = streaming && !!provider.chatStream;
       
       let response: { content: string | null; tool_calls: any[] | null; finishReason: string; reasoning_content?: string };
-      let partialContent = ""; // catchで参照できるようtryスコープに
+      let partialContent = "";
 
       if (useStream) {
         // ストリーミングモード — ツール呼び出しはチャンク間で蓄積マージが必要
@@ -113,7 +113,7 @@ export async function agentLoop(
           // ツール呼び出しをチャンク間で蓄積マージ
           if (chunk.tool_calls) {
             for (const tc of chunk.tool_calls) {
-              const idx = tc.index ?? 0;
+              const idx = (tc as any).index ?? 0;
               const existing = streamToolCalls.get(idx);
               if (existing) {
                 // arguments を追記

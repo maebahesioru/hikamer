@@ -409,17 +409,6 @@ export async function startDiscord(token: string): Promise<Client> {
 
     processing.add(lockKey);
 
-    // ========== 前処理（インジェクションガード＋システムコマンド＋レート制限） ==========
-    const { preprocessMessage } = await import("./index");
-    const preprocess = await preprocessMessage(cleanContent, message.author.id, message.channelId);
-    if (preprocess.skipAgent) {
-      if (preprocess.response) {
-        await sendInThread(preprocess.response).catch(() => {});
-      }
-      processing.delete(lockKey);
-      return;
-    }
-
     // ========== スレッド作成 ==========
     let threadId: string | null = null;
 
@@ -487,7 +476,7 @@ export async function startDiscord(token: string): Promise<Client> {
         return message.guild?.channels.fetch(threadId).catch(() => null) ?? null;
       }
 
-      async function sendInThread(text: string): Promise<any> {
+      const sendInThread = async (text: string): Promise<any> => {
         if (!text) return null;
         const target = await getThreadChannel();
         // スレッドがあればスレッドに送信
@@ -510,6 +499,21 @@ export async function startDiscord(token: string): Promise<Client> {
       typingTarget.sendTyping().catch(() => {});
       typingInterval = setInterval(() => typingTarget.sendTyping().catch(() => {}), 8000);
       message.react("👀").catch(() => {});
+
+      // ========== 前処理（インジェクションガード＋システムコマンド＋レート制限） ==========
+      try {
+        const { preprocessMessage } = await import("./index");
+        const preprocess = await preprocessMessage(cleanContent, message.author.id, message.channelId);
+        if (preprocess.skipAgent) {
+          if (preprocess.response) {
+            await sendInThread(preprocess.response).catch(() => {});
+          }
+          processing.delete(lockKey);
+          return;
+        }
+      } catch (e: any) {
+        logger.warn(`前処理エラー: ${e.message}`);
+      }
 
       let preMsg: any = null;
       let postMsg: any = null;
