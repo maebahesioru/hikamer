@@ -23,5 +23,6 @@ import "./file-state";
 import "./image-gen";
 import "./todo";
 import "./discord-tools";
+import "./git";
 
 export { toolRegistry } from "./registry";

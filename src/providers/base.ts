@@ -143,9 +143,17 @@ function getModelsUrl(entry: ProviderEntry): string {
 /** リトライ時の通知コールバック（messaging.tsからセット→Discord表示） */
 export let onRetry: ((msg: string) => void) | null = null;
 
+/** LLM完了時のコールバック（コストトラッキング用） */
+export let onLLMResult: ((model: string, sessionId: string, inputTokens: number, outputTokens: number, reasoningTokens?: number) => void) | null = null;
+
 /** リトライコールバックをセット（必ず使い終わったらnullに戻す） */
 export function setOnRetry(fn: ((msg: string) => void) | null): void {
   onRetry = fn;
+}
+
+/** LLM結果コールバックをセット */
+export function setOnLLMResult(fn: typeof onLLMResult): void {
+  onLLMResult = fn;
 }
 
 async function retryFetch(
@@ -195,6 +203,8 @@ export function createActiveProvider(): LLMProvider {
 
 function createProvider(entry: ProviderEntry, model: string, apiKey: string): LLMProvider {
   const url = getChatUrl(entry, model);
+  const _modelName = model;
+  let _currentSessionId = "default";
 
   return {
     name: entry.name,
@@ -250,6 +260,17 @@ function createProvider(entry: ProviderEntry, model: string, apiKey: string): LL
         case "anthropic": result = parseAnthropicResponse(json); break;
         case "gemini": result = parseGeminiResponse(json); break;
         default: result = parseOpenAIResponse(json);
+      }
+
+      // コストトラッキング
+      if (onLLMResult && result.usage) {
+        try {
+          // sessionIdはcreateActiveProviderの呼び出し元から設定される
+          const sid = _currentSessionId || "default";
+          onLLMResult(_modelName, sid, result.usage.promptTokens, result.usage.completionTokens, result.usage.reasoningTokens);
+        } catch (e) {
+          // コスト記録の失敗はLLM呼び出し本体に影響させない
+        }
       }
 
       logger.debug(`LLM応答: ${elapsed}ms, finish=${result.finishReason}, reasoning=${result.usage?.reasoningTokens || 0}t`);

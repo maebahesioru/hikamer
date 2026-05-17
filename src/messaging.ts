@@ -409,6 +409,17 @@ export async function startDiscord(token: string): Promise<Client> {
 
     processing.add(lockKey);
 
+    // ========== 前処理（インジェクションガード＋システムコマンド＋レート制限） ==========
+    const { preprocessMessage } = await import("./index");
+    const preprocess = await preprocessMessage(cleanContent, message.author.id, message.channelId);
+    if (preprocess.skipAgent) {
+      if (preprocess.response) {
+        await sendInThread(preprocess.response).catch(() => {});
+      }
+      processing.delete(lockKey);
+      return;
+    }
+
     // ========== スレッド作成 ==========
     let threadId: string | null = null;
 
