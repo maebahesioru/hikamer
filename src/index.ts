@@ -9,6 +9,7 @@ import "./tools/index";
 import { connectAllMcpServers } from "./tools/mcp-client";
 import { logger } from "./utils/logger";
 import { eventBus, createEvent } from "./event-bus";
+import { startWebhookServer } from "./webhook";
 // DB初期化
 import "./db";
 
@@ -95,6 +96,11 @@ async function main() {
 
   // MCP自動接続
   await connectAllMcpServers();
+
+  // Webhookサーバー起動（環境変数WEBHOOK_ENABLED=true時）
+  if (process.env.WEBHOOK_ENABLED === "true") {
+    startWebhookServer();
+  }
 
   // 起動イベント発行
   eventBus.publish(createEvent("system", "startup", {

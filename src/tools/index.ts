@@ -21,5 +21,7 @@ import "./skills";
 import "./cron-manager";
 import "./file-state";
 import "./image-gen";
+import "./todo";
+import "./discord-tools";
 
 export { toolRegistry } from "./registry";
