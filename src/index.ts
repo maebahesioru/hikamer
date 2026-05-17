@@ -337,6 +337,50 @@ registerCommand("config", async (args) => {
   return configManager.formatConfig();
 });
 
+registerCommand("flags", async (args) => {
+  const { featureFlags } = await import("./feature-flags");
+  if (!args) return featureFlags.formatFlags();
+  const parts = args.split(" ");
+  if (parts[0] === "enable" && parts[1]) {
+    featureFlags.setOverride(parts[1]!, true);
+    return `✅ フラグ有効化: ${parts[1]}`;
+  }
+  if (parts[0] === "disable" && parts[1]) {
+    featureFlags.setOverride(parts[1]!, false);
+    return `✅ フラグ無効化: ${parts[1]}`;
+  }
+  return featureFlags.formatFlags();
+});
+
+registerCommand("obsidian", async (args) => {
+  const { obsidianVault } = await import("./obsidian");
+  if (!args) return obsidianVault.getInfo().available
+    ? `📓 Vault: ${obsidianVault.getInfo().path} (${obsidianVault.getInfo().noteCount}ノート)`
+    : "📓 Obsidian Vaultが設定されていません。OBSIDIAN_VAULT を設定してください。";
+  const parts = args.split(" ");
+  if (parts[0] === "search" && parts[1]) {
+    const notes = obsidianVault.searchNotes(parts.slice(1).join(" "));
+    return obsidianVault.formatNotes(notes);
+  }
+  if (parts[0] === "tag" && parts[1]) {
+    const notes = obsidianVault.findByTag(parts[1]!);
+    return obsidianVault.formatNotes(notes);
+  }
+  return obsidianVault.getInfo().available
+    ? `📓 Vault OK: ${obsidianVault.getInfo().noteCount}ノート`
+    : "📓 Vault未設定";
+});
+
+registerCommand("supervisor", async (args) => {
+  const { supervisor } = await import("./supervisor");
+  if (!args) return supervisor.formatStatus();
+  const parts = args.split(" ");
+  if (parts[0] === "start" && parts[1]) return supervisor.start(parts[1]!) ? `✅ 開始: ${parts[1]}` : "❌ 開始失敗";
+  if (parts[0] === "stop" && parts[1]) return supervisor.stop(parts[1]!) ? `⏹️ 停止: ${parts[1]}` : "❌ 停止失敗";
+  if (parts[0] === "restart" && parts[1]) return supervisor.restart(parts[1]!) ? `🔄 再起動: ${parts[1]}` : "❌ 再起動失敗";
+  return supervisor.formatStatus();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -407,8 +451,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.14 起動中…");
-  logger.info(" Sandbox / ConfigManager / CodeSandbox / Billing / Learning");
+  logger.info(" Aikata v1.15 起動中…");
+  logger.info(" FeatureFlags / Obsidian / Supervisor / REST API / Platform");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
