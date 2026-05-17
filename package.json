@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@askjo/camofox-browser": "^1.10.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^11.7.0",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.7",
