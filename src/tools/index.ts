@@ -12,5 +12,7 @@ import "./schedule";
 import "./sqlite";
 import "./memory";
 import "./delegate";
+import "./search";
+import "./export";
 
 export { toolRegistry } from "./registry";

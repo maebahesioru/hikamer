@@ -7,6 +7,7 @@
 import type { ToolDescriptor } from "../types";
 import { toolRegistry } from "./registry";
 import { logger } from "../utils/logger";
+import { checkUrlSafety } from "../url-safety";
 
 const CAMOFOX_URL = process.env.CAMOFOX_URL || "http://localhost:9377";
 
@@ -55,6 +56,12 @@ async function camofoxEnsureTab(url?: string): Promise<string> {
 }
 
 async function camofoxNavigate(url: string): Promise<string> {
+  // URL安全チェック
+  const safety = await checkUrlSafety(url);
+  if (!safety.safe) {
+    return `[エラー] URLがブロックされました: ${safety.reason}`;
+  }
+
   const tabId = await camofoxEnsureTab(url);
   const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/navigate`, {
     method: "POST",
@@ -171,6 +178,11 @@ async function fallbackPlaywright(args: Record<string, unknown>): Promise<string
     case "navigate": {
       const url = args.url as string;
       if (!url) return "[Playwright] url が必要";
+      // URL安全チェック
+      const safety = await checkUrlSafety(url);
+      if (!safety.safe) {
+        return `[エラー] URLがブロックされました: ${safety.reason}`;
+      }
       await page.goto(url, { timeout: 30_000, waitUntil: "domcontentloaded" });
       const title = await page.title();
       const text = await page.evaluate(() => document.body.innerText.slice(0, 10_000));

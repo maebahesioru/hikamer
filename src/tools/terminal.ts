@@ -7,6 +7,7 @@ import { promisify } from "util";
 import { platform } from "os";
 import type { ToolDescriptor } from "../types";
 import { toolRegistry } from "./registry";
+import { cleanTerminalOutput } from "../ansi-strip";
 
 const execAsync = promisify(exec);
 
@@ -50,10 +51,13 @@ const descriptor: ToolDescriptor = {
         windowsHide: true,
       });
 
-      if (!stdout && !stderr) return "(出力なし)";
-      if (!stdout) return `(stderr)\n${stderr}`;
-      if (!stderr) return stdout;
-      return `${stdout}\n(stderr)\n${stderr}`;
+      let output: string;
+      if (!stdout && !stderr) output = "(出力なし)";
+      else if (!stdout) output = `(stderr)\n${stderr}`;
+      else if (!stderr) output = stdout;
+      else output = `${stdout}\n(stderr)\n${stderr}`;
+
+      return cleanTerminalOutput(output);
     } catch (e: any) {
       const exitCode = e.code ?? "?";
       const msg = e.stderr || e.stdout || e.message || String(e);

@@ -34,6 +34,11 @@ export function getConversationThreadId(id: string): string | null {
   return row?.thread_id || null;
 }
 
+export function getConversationTitle(id: string): string | null {
+  const row = db.prepare("SELECT title FROM conversations WHERE id = ?").get(id) as any;
+  return row?.title || null;
+}
+
 export function getHistory(conversationId: string, limit = 99999): Message[] {
   const rows = db.prepare(`
     SELECT role, content, tool_calls, tool_call_id

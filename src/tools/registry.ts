@@ -7,6 +7,41 @@ import type { Tool, ToolDescriptor } from "../types";
 import { logger } from "../utils/logger";
 import { trimToolResult } from "../budget-config";
 
+/** 各行の最大長（超えるとトリム） */
+const MAX_LINE_LENGTH = 5000;
+/** 最大行数（超えると中央を省略） */
+const MAX_LINES = 2000;
+
+/**
+ * 出力を行レベルでもトリム
+ * 超長行のトリム + 行数制限（中央省略）
+ */
+function applyLineLimits(result: string): string {
+  const lines = result.split("\n");
+
+  // 各行の長さ制限
+  const trimmedLines = lines.map(line => {
+    if (line.length > MAX_LINE_LENGTH) {
+      return line.slice(0, MAX_LINE_LENGTH) + `…[${line.length - MAX_LINE_LENGTH}文字省略]`;
+    }
+    return line;
+  });
+
+  // 行数制限（中央省略）
+  if (trimmedLines.length > MAX_LINES) {
+    const head = trimmedLines.slice(0, Math.floor(MAX_LINES * 0.4));
+    const tail = trimmedLines.slice(-Math.floor(MAX_LINES * 0.6));
+    const skipped = trimmedLines.length - head.length - tail.length;
+    return [
+      ...head,
+      `…[${skipped}行省略 / 全${trimmedLines.length}行中${MAX_LINES}行表示]`,
+      ...tail,
+    ].join("\n");
+  }
+
+  return trimmedLines.join("\n");
+}
+
 class ToolRegistry {
   private tools = new Map<string, ToolDescriptor>();
   private beforeHooks: Array<(name: string, args: Record<string, unknown>) => void> = [];
@@ -88,10 +123,11 @@ class ToolRegistry {
       const duration = Date.now() - start;
       this.afterHooks.forEach(fn => { try { fn(name, args, result, duration); } catch {} });
       const trimmed = trimToolResult(name, result);
-      if (trimmed !== result) {
-        logger.debug(`結果トリム: ${name} ${result.length}→${trimmed.length}`);
+      const lineLimited = applyLineLimits(trimmed);
+      if (lineLimited !== result) {
+        logger.debug(`結果トリム: ${name} ${result.length}→${lineLimited.length}`);
       }
-      return trimmed;
+      return lineLimited;
     } catch (e: any) {
       const duration = Date.now() - start;
       const err = `[エラー] ${e.message || String(e)}`;
