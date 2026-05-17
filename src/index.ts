@@ -186,6 +186,31 @@ registerCommand("pending", async () => {
   return approvalManager.formatPending();
 });
 
+registerCommand("creds", async () => {
+  const { formatCredentials } = await import("./credentials");
+  return formatCredentials();
+});
+
+registerCommand("notif", async (args) => {
+  const { notificationManager } = await import("./notifications");
+  if (!args) return notificationManager.formatHistory();
+  return notificationManager.formatHistory(args as any);
+});
+
+registerCommand("routes", async () => {
+  const { modelRouter } = await import("./model-router");
+  return modelRouter.formatRoutes();
+});
+
+registerCommand("context", async (args) => {
+  const { contextManager } = await import("./context-manager");
+  if (args === "compress") {
+    const result = contextManager.compress();
+    return `✅ 圧縮完了: ${result.removedMessages}メッセージ削除, ${result.savedTokens}トークン節約`;
+  }
+  return contextManager.formatStats();
+});
+
 registerCommand("reset", async (_args, _userId) => {
   // コスト警告リセット
   resetBudgetWarnings();
@@ -256,8 +281,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.9 起動中…");
-  logger.info(" コストトラッキング / ヘルス監視 / レート制限 / インジェクションガード");
+  logger.info(" Aikata v1.11 起動中…");
+  logger.info(" ModelRouting / Credentials / VoiceTTS / Notifications / ContextManager");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
