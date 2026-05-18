@@ -17,6 +17,8 @@ export type EventDomain =
   | "memory"      // メモリ読み書き
   | "cron"        // スケジューラー
   | "heartbeat"   // 心拍エンジン
+  | "channel"     // マルチチャンネル
+  | "subagent"    // サブエージェント
   | "stream"      // ストリーミング
   | "provider"    // LLMプロバイダー
   | "error";      // エラー

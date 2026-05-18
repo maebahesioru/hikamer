@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.29: NEW - Commitments + Crestodian + Heartbeat + REM Memory + ThinkScrubber
-// 3リポジトリからの全抽出完了。全150+5=155ファイル
+// v1.30: NEW - Channels + Secrets + Flows + SubAgents + Sandbox
+// 3リポジトリからの全抽出完了。全150+10=160ファイル
 // ==========================================
 
 import "dotenv/config";
@@ -907,6 +907,51 @@ registerCommand("scrub", async (args) => {
   return `🧹 スクラブ結果:\\n${stripThinkBlocks(args)}`;
 });
 
+// ==================== v1.30: NEW - Channels + Secrets + Flows + SubAgents + Sandbox ====================
+
+registerCommand("channels", async (args) => {
+  const { channelManager } = await import("./channels");
+  const cmd = (args || "").trim().toLowerCase();
+  if (cmd === "health") {
+    const results = await channelManager.healthAll();
+    return ["🔌 **チャンネルヘルス**", ...Object.entries(results).map(([name, ok]) => `  ${ok ? "✅" : "❌"} ${name}`)].join("\n");
+  }
+  return channelManager.formatStatus();
+});
+
+registerCommand("secrets", async (args) => {
+  const { formatSecretsStatus, auditSecrets, formatAuditReport } = await import("./secrets-manager");
+  const cmd = (args || "").trim().toLowerCase();
+  if (cmd === "audit") {
+    const { collectOverview } = await import("./crestodian");
+    const overview = await collectOverview();
+    const findings = auditSecrets({ config: { valid: overview.config.valid } } as any);
+    return formatAuditReport(findings);
+  }
+  return formatSecretsStatus();
+});
+
+registerCommand("flows", async () => {
+  const { formatSetupGuide, getFlows } = await import("./flows");
+  const allFlows = getFlows();
+  const lines = [formatSetupGuide(), "", `📋 登録フロー: ${allFlows.length}件`];
+  return lines.join("\n");
+});
+
+registerCommand("subagents", async (args) => {
+  const { subagentRegistry, formatSubagentDetail } = await import("./subagents");
+  const cmd = (args || "").trim().toLowerCase();
+  if (cmd.startsWith("show ")) {
+    return formatSubagentDetail(cmd.slice(5));
+  }
+  return subagentRegistry.formatStats();
+});
+
+registerCommand("sandbox", async () => {
+  const { defaultPolicy, defaultSandbox } = await import("./sandbox");
+  return [defaultPolicy.formatPolicy(), "", `🛡️ **サンドボックス**: ${defaultSandbox.name}`].join("\n");
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -971,8 +1016,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.29 起動中…");
-  logger.info(" NEW: Commitments / Crestodian / Heartbeat / REM Memory / ThinkScrubber");
+  logger.info(" Aikata v1.30 起動中…");
+  logger.info(" NEW: Channels / Secrets / Flows / SubAgents / Sandbox");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
