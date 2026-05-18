@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.25: RedirectLinks + MeetAgent + Runtime + WhatsApp + ShellHooks
+// v1.26: 最終弾 - Insights + Trajectory + WebViewAccounts + ProviderSurfaces + Misc
 // ==========================================
 
 import "dotenv/config";
@@ -763,6 +763,36 @@ registerCommand("shell", async () => {
   return shellManager.formatConfig();
 });
 
+// ==================== v1.26: 最終弾コマンド ====================
+
+registerCommand("insights", async (args) => {
+  const { insightsEngine } = await import("./insights");
+  const sub = args?.toLowerCase();
+  if (sub === "daily") return insightsEngine.formatDailyUsage();
+  insightsEngine.generateInsights();
+  return insightsEngine.formatStats(insightsEngine.computeStats(7));
+});
+
+registerCommand("trajectory", async () => {
+  const { trajectoryCompressor } = await import("./trajectory-compressor");
+  return "📦 **軌跡圧縮**\n圧縮率計算・重要情報抽出";
+});
+
+registerCommand("webview", async () => {
+  const { webViewAccounts } = await import("./webview-accounts");
+  return webViewAccounts.formatStatus();
+});
+
+registerCommand("surfaces", async () => {
+  const { providerSurfaces } = await import("./provider-surfaces");
+  return providerSurfaces.formatStatus();
+});
+
+registerCommand("utils", async () => {
+  const { formatMiscStatus } = await import("./aikata-misc");
+  return formatMiscStatus();
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -827,8 +857,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.25 起動中…");
-  logger.info(" RedirectLinks / MeetAgent / Runtime / WhatsApp / ShellHooks");
+  logger.info(" Aikata v1.26 起動中…");
+  logger.info(" FINAL: Insights / Trajectory / WebView / Surfaces / Misc");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
