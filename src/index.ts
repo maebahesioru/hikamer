@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.18: Threads + Hooks + Doctor + Connectivity + SituationReport
+// v1.19: Triage + Vault + ErrorClassifier + Team + Gateway
 // ==========================================
 
 import "dotenv/config";
@@ -457,6 +457,38 @@ registerCommand("reset", async (_args, _userId) => {
   return "✅ コスト警告をリセットしました。";
 });
 
+// ==================== v1.19: 第18弾コマンド ====================
+
+registerCommand("triage", async (args) => {
+  const { getTriageCommands } = await import("./triage");
+  const cmds = getTriageCommands();
+  return cmds["/triage"] ? cmds["/triage"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("vault", async (args) => {
+  const { vaultManager, getVaultCommands } = await import("./vault");
+  const cmds = getVaultCommands();
+  return cmds["/vault"] ? await cmds["/vault"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("errors", async (args) => {
+  const { errorClassifier, getErrorCommands } = await import("./error-classifier");
+  const cmds = getErrorCommands();
+  return cmds["/errors"] ? cmds["/errors"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("team", async (args) => {
+  const { teamManager, getTeamCommands } = await import("./team");
+  const cmds = getTeamCommands();
+  return cmds["/team"] ? cmds["/team"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("gateway", async (args) => {
+  const { gateway, getGatewayCommands } = await import("./gateway-platform");
+  const cmds = getGatewayCommands();
+  return cmds["/gateway"] ? await cmds["/gateway"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
 // ==================== v1.18: 新モジュールコマンド ====================
 
 registerCommand("threads", async (args) => {
@@ -553,8 +585,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.18 起動中…");
-  logger.info(" Threads / Hooks / Doctor / Connectivity / SituationReport");
+  logger.info(" Aikata v1.19 起動中…");
+  logger.info(" Triage / Vault / ErrorClassifier / Team / Gateway");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -646,7 +678,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /threads /hooks /doctor /connectivity /situation");
+  logger.info(" /triage /vault /errors /team /gateway");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
