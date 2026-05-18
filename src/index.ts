@@ -1121,6 +1121,22 @@ async function main() {
   logger.info(" /redirect /meet-agent /runtime /whatsapp /shell");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
+  // v1.43: 統合モジュール初期化
+  try {
+    // MCTSエンジン（Scenario Lab）
+    const { MCTSEngine } = await import("./mcts-decision");
+    logger.info("[MCTS] Monte Carlo Tree Search エンジン使用可能");
+  } catch (err) {
+    logger.debug("[Startup] MCTSスキップ");
+  }
+  try {
+    // 累積コストキャッシュ（claude-pulse）
+    const { cumulativeCost } = await import("./cumulative-cost");
+    logger.info(`[CostCache] ${cumulativeCost.formatSummary().split("\\n")[0]}`);
+  } catch (err) {
+    logger.debug("[Startup] CostCacheスキップ");
+  }
+
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
   if (process.env.ENABLE_SUBCONSCIOUS === "true") {
     subconscious.start();

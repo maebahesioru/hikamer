@@ -158,7 +158,17 @@ export const subagentRegistry = new SubagentRegistry();
 
 // ==================== サブエージェント生成 ====================
 
-/** サブエージェントを生成（バックグラウンド） */
+// v1.43: Worktree分離（Orca由来）
+// lazy import to avoid circular deps
+let worktreeManager: any = null;
+async function getWorktreeManager() {
+  if (!worktreeManager) {
+    worktreeManager = (await import("./parallel-agents")).worktreeManager;
+  }
+  return worktreeManager;
+}
+
+/** サブエージェントを生成（バックグラウンド + Worktree分離） */
 export async function spawnSubagent(
   goal: string,
   config?: SubagentConfig,
@@ -193,6 +203,15 @@ export async function spawnSubagent(
     parentId: parentId || null,
   }));
 
+  // v1.43: Worktreeの割り当て（Orca由来の分離実行）
+  getWorktreeManager().then(wtm => {
+    const wt = wtm.assign(record.id);
+    if (wt) {
+      logger.debug(`[SubAgent] Worktree割当: ${record.id} → ${wt.id}`);
+      (record as any)._worktreeId = wt.id;
+    }
+  }).catch(() => {});
+
   return record;
 }
 
@@ -217,6 +236,12 @@ export function completeSubagent(id: string, result: string, error?: string): vo
   // 親への通知
   if (r.parentId) {
     announceToParent(r);
+  }
+
+  // v1.43: Worktreeの解放
+  const wtId = (r as any)._worktreeId as string | undefined;
+  if (wtId) {
+    getWorktreeManager().then(wtm => wtm.release(wtId)).catch(() => {});
   }
 }
 

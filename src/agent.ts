@@ -212,6 +212,21 @@ export async function agentLoop(
       };
       messages.push(assistantMsg);
 
+      // v1.43: 応答評価（DeepEval由来 LLM-as-a-Judge）
+      if (response.content && response.content.length > 50) {
+        import("./response-judge").then(({ responseJudge }) => {
+          responseJudge.evaluate(response.content!, {
+            userMessage,
+            systemPrompt,
+            toolCalls: response.tool_calls?.map(tc => tc.function.name),
+          }).then(result => {
+            if (!result.passed && result.overallScore < 0.5) {
+              logger.warn(`[Agent] 応答品質低: ${(result.overallScore * 100).toFixed(0)}%`);
+            }
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+
       if (!response.tool_calls || response.tool_calls.length === 0) {
         saveMessages(conversationId, [assistantMsg]);
         logger.warn("空応答で終了");
