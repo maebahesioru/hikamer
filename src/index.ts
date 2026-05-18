@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.19: Triage + Vault + ErrorClassifier + Team + Gateway
+// v1.20: Harness + SecurityAudit + BackgroundReview + PromptCache + FileSafety
 // ==========================================
 
 import "dotenv/config";
@@ -489,6 +489,38 @@ registerCommand("gateway", async (args) => {
   return cmds["/gateway"] ? await cmds["/gateway"](args ? args.split(" ") : []) : "❌ コマンドエラー";
 });
 
+// ==================== v1.20: 第19弾コマンド ====================
+
+registerCommand("harness", async (args) => {
+  const { sessionHarness, getHarnessCommands } = await import("./harness");
+  const cmds = getHarnessCommands();
+  return cmds["/harness"] ? cmds["/harness"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("audit", async (args) => {
+  const { securityAudit, getSecurityCommands } = await import("./security-audit");
+  const cmds = getSecurityCommands();
+  return cmds["/audit"] ? cmds["/audit"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("review", async (args) => {
+  const { reviewer, getReviewCommands } = await import("./background-review");
+  const cmds = getReviewCommands();
+  return cmds["/review"] ? cmds["/review"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("cache", async (args) => {
+  const { promptCache, getCacheCommands } = await import("./prompt-cache");
+  const cmds = getCacheCommands();
+  return cmds["/cache"] ? cmds["/cache"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("safety", async (args) => {
+  const { fileSafety, getFileSafetyCommands } = await import("./file-safety");
+  const cmds = getFileSafetyCommands();
+  return cmds["/safety"] ? cmds["/safety"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
 // ==================== v1.18: 新モジュールコマンド ====================
 
 registerCommand("threads", async (args) => {
@@ -585,8 +617,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.19 起動中…");
-  logger.info(" Triage / Vault / ErrorClassifier / Team / Gateway");
+  logger.info(" Aikata v1.20 起動中…");
+  logger.info(" Harness / SecurityAudit / BackgroundReview / PromptCache / FileSafety");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -678,7 +710,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /triage /vault /errors /team /gateway");
+  logger.info(" /harness /audit /review /cache /safety");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
