@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.22: Composio + Voice + Wallet + Update + LearningReflection
+// v1.23: Orchestrator + ScreenIntelligence + Providers + LocalInference + Meet
 // ==========================================
 
 import "dotenv/config";
@@ -674,6 +674,44 @@ registerCommand("learn", async (args) => {
   return "🧠 **学習コマンド**\n/learn stats — 統計\n/learn rules — 全ルール\n/learn high — 高信頼度ルール";
 });
 
+// ==================== v1.23: 第22弾コマンド ====================
+
+registerCommand("orchestrate", async (args) => {
+  const { orchestrator } = await import("./orchestrator");
+  const sub = args?.toLowerCase();
+  if (sub === "agents") return orchestrator.formatAgents();
+  if (sub === "plans") {
+    const plans = orchestrator.listPlans();
+    if (plans.length === 0) return "📭 プランはありません";
+    return plans.map(p => orchestrator.formatPlan(p)).join("\n\n---\n\n");
+  }
+  return "🤖 **オーケストレーター**\n/orchestrate agents — エージェント一覧\n/orchestrate plans — プラン一覧";
+});
+
+registerCommand("screen", async (args) => {
+  const { screenIntelligence } = await import("./screen-intelligence");
+  const sub = args?.toLowerCase();
+  if (sub === "status" || !sub) return screenIntelligence.formatStatus();
+  return screenIntelligence.formatStatus();
+});
+
+registerCommand("providers", async () => {
+  const { providerManager } = await import("./providers-gmail-slack");
+  return providerManager.formatStatus();
+});
+
+registerCommand("local", async (args) => {
+  const { localInference } = await import("./local-inference");
+  return localInference.formatStatus();
+});
+
+registerCommand("meet", async (args) => {
+  const { meetManager } = await import("./meet");
+  const sub = args?.toLowerCase();
+  if (sub === "status" || !sub) return meetManager.formatStatus();
+  return meetManager.formatStatus();
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -738,8 +776,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.22 起動中…");
-  logger.info(" Composio / Voice / Wallet / Update / LearningReflection");
+  logger.info(" Aikata v1.23 起動中…");
+  logger.info(" Orchestrator / ScreenIntelligence / Providers / LocalInference / Meet");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -831,7 +869,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /composio /voice /wallet /learn /update");
+  logger.info(" /orchestrate /screen /providers /local /meet");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
