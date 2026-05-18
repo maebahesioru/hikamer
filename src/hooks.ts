@@ -270,6 +270,41 @@ class TraceHook implements AgentHook {
   }
 }
 
+// ==================== メモリ観察フック（agentmemory由来 PostToolUse相当） ====================
+
+class MemoryObserveHook implements AgentHook {
+  name = "memory-observe";
+  priority: HookPriority = "low";
+  enabled = true;
+
+  async execute(context: TurnContext): Promise<void> {
+    try {
+      const { observeMemory } = await import("./memory-bridge");
+
+      // ツール呼び出しを1つずつ観察
+      for (const call of context.toolCalls) {
+        const summary = `[Tool] ${call.toolName}(${call.success ? "success" : "failed"}) ${call.durationMs}ms`;
+        await observeMemory(summary, {
+          importance: call.success ? 0.2 : 0.5,
+          sessionId: context.sessionId,
+          entities: [call.toolName, call.success ? "success" : "error"],
+        });
+      }
+
+      // ユーザーメッセージの主要トピックを観察
+      const trimmed = context.userMessage.slice(0, 200);
+      if (trimmed.length > 10) {
+        await observeMemory(`[User] ${trimmed}`, {
+          importance: 0.15,
+          sessionId: context.sessionId,
+        });
+      }
+    } catch (err) {
+      logger.debug(`[Hook:memory-observe] skipped (no pipeline): ${err}`);
+    }
+  }
+}
+
 // ==================== フックマネージャー ====================
 
 class HookManager {
@@ -285,6 +320,7 @@ class HookManager {
     this.register(new TelemetryHook());
     this.register(new AlertHook());
     this.register(new TraceHook());
+    this.register(new MemoryObserveHook());
 
     this.initialized = true;
     logger.info(`[Hooks] initialized with ${this.hooks.length} hooks`);

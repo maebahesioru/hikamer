@@ -55,11 +55,37 @@ export async function agentLoop(
 
   ensureConversation(conversationId);
 
+  // v1.40: プロンプトエンジン統合（prompt-master由来）
+  let enhancedSystemPrompt = systemPrompt;
+  try {
+    const { extractIntent, diagnosePrompt, formatDiagnosis, buildPrompt } = await import("./prompt-engine");
+    const intent = extractIntent(userMessage, provider.model);
+    
+    // 品質診断（重要度高いものだけログ）
+    const issues = diagnosePrompt(userMessage, { model: provider.model });
+    const criticalIssues = issues.filter(i => i.severity === "high");
+    if (criticalIssues.length > 0) {
+      logger.info(`[PromptEngine] ${criticalIssues.length}件の改善点を検出`);
+    }
+
+    // エージェント的タスクの場合はReActテンプレートをシステムプロンプトに追加
+    if (intent.isAgentic) {
+      enhancedSystemPrompt += `\n\n## エージェントモード\nこのタスクは自律エージェント動作が必要です。\n- 目標達成まで段階的に進める\n- 停止条件: 目標達成または致命的エラー\n- 各ステップ: Thought → Action → Observation → ...`;
+    }
+    // 推論が必要な場合はCoT促進
+    if (intent.needsReasoning && !intent.isReasoningModel) {
+      enhancedSystemPrompt += `\n\n## 思考モード\nこのタスクは段階的な推論が必要です。\n問題を分解し、各ステップを明示的に考えてから回答してください。`;
+    }
+  } catch (e) {
+    // prompt-engineが利用不可でも従来通り動作
+    logger.debug(`[PromptEngine] 統合スキップ: ${e}`);
+  }
+
   // 全履歴を復元
   const pastHistory = getHistory(conversationId, 99999);
 
   const messages: Message[] = [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: enhancedSystemPrompt },
     ...pastHistory,
     { role: "user", content: userMessage },
   ];

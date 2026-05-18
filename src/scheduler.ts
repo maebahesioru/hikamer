@@ -79,3 +79,136 @@ export function stopScheduler(): void {
   activeJobs.clear();
   logger.info("スケジューラー停止");
 }
+
+// ==================== バッチパイプラインプログレス（OmniVoice由来） ====================
+
+interface PipelineStage {
+  name: string;
+  status: "pending" | "running" | "completed" | "failed";
+  startedAt?: number;
+  completedAt?: number;
+  result?: string;
+  error?: string;
+}
+
+interface PipelineRun {
+  id: string;
+  label: string;
+  stages: PipelineStage[];
+  createdAt: number;
+  completedAt?: number;
+  status: "running" | "completed" | "failed";
+  totalStages: number;
+  completedStages: number;
+}
+
+class PipelineManager {
+  private pipelines = new Map<string, PipelineRun>();
+  private nextId = 1;
+
+  /**
+   * パイプラインを開始
+   */
+  start(label: string, stageNames: string[]): string {
+    const id = `pipe-${this.nextId++}`;
+    const pipeline: PipelineRun = {
+      id,
+      label,
+      stages: stageNames.map(name => ({ name, status: "pending" })),
+      createdAt: Date.now(),
+      status: "running",
+      totalStages: stageNames.length,
+      completedStages: 0,
+    };
+    this.pipelines.set(id, pipeline);
+    logger.info(`[Pipeline] 開始: ${id} "${label}" (${stageNames.length}段階)`);
+    return id;
+  }
+
+  /**
+   * ステージを開始
+   */
+  startStage(pipelineId: string, stageIndex: number): boolean {
+    const pipeline = this.pipelines.get(pipelineId);
+    if (!pipeline) return false;
+    const stage = pipeline.stages[stageIndex];
+    if (!stage) return false;
+    stage.status = "running";
+    stage.startedAt = Date.now();
+    return true;
+  }
+
+  /**
+   * ステージを完了
+   */
+  completeStage(pipelineId: string, stageIndex: number, result?: string): boolean {
+    const pipeline = this.pipelines.get(pipelineId);
+    if (!pipeline) return false;
+    const stage = pipeline.stages[stageIndex];
+    if (!stage) return false;
+    stage.status = "completed";
+    stage.completedAt = Date.now();
+    stage.result = result;
+    pipeline.completedStages = pipeline.stages.filter(s => s.status === "completed").length;
+    return true;
+  }
+
+  /**
+   * ステージを失敗
+   */
+  failStage(pipelineId: string, stageIndex: number, error: string): boolean {
+    const pipeline = this.pipelines.get(pipelineId);
+    if (!pipeline) return false;
+    const stage = pipeline.stages[stageIndex];
+    if (!stage) return false;
+    stage.status = "failed";
+    stage.completedAt = Date.now();
+    stage.error = error;
+    pipeline.status = "failed";
+    pipeline.completedAt = Date.now();
+    logger.warn(`[Pipeline] 失敗: ${pipelineId} stage ${stageIndex}: ${error}`);
+    return true;
+  }
+
+  /**
+   * パイプラインを完了
+   */
+  complete(pipelineId: string): boolean {
+    const pipeline = this.pipelines.get(pipelineId);
+    if (!pipeline) return false;
+    pipeline.status = "completed";
+    pipeline.completedAt = Date.now();
+    logger.info(`[Pipeline] 完了: ${pipelineId} "${pipeline.label}"`);
+    return true;
+  }
+
+  /**
+   * 進行状況をフォーマット
+   */
+  formatProgress(pipelineId: string): string {
+    const pipeline = this.pipelines.get(pipelineId);
+    if (!pipeline) return "パイプラインが見つかりません";
+
+    const pct = pipeline.totalStages > 0
+      ? Math.round((pipeline.completedStages / pipeline.totalStages) * 100)
+      : 0;
+    const emoji = pipeline.status === "completed" ? "✅" : pipeline.status === "failed" ? "❌" : "🔄";
+
+    const lines = [`${emoji} **${pipeline.label}** (${pct}%)`];
+    const barWidth = 15;
+    const filled = Math.round((pipeline.completedStages / pipeline.totalStages) * barWidth);
+    const empty = barWidth - filled;
+    lines.push(`[${"█".repeat(filled)}${"░".repeat(empty)}]`);
+
+    for (let i = 0; i < pipeline.stages.length; i++) {
+      const s = pipeline.stages[i]!;
+      const statusEmoji = s.status === "completed" ? "✅" : s.status === "running" ? "🔄" : s.status === "failed" ? "❌" : "⏳";
+      const elapsed = s.startedAt ? ` (${((Date.now() - s.startedAt) / 1000).toFixed(0)}s)` : "";
+      lines.push(`${statusEmoji} Stage ${i + 1}: ${s.name}${elapsed}`);
+    }
+
+    return lines.join("\n");
+  }
+}
+
+export const pipelineManager = new PipelineManager();

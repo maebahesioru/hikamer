@@ -322,3 +322,51 @@ class WebSocketServer {
 
 const WS_PORT = parseInt(process.env.WS_PORT || "9722", 10);
 export const wsServer = new WebSocketServer(WS_PORT);
+
+/**
+ * メモリ更新イベントをブロードキャスト（OmniVoice WebSocketイベント由来）
+ */
+export function broadcastMemoryEvent(action: string, data: Record<string, unknown>): void {
+  wsServer.broadcast({
+    type: "memory",
+    action,
+    data,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * コスト更新イベントをブロードキャスト
+ */
+export function broadcastCostEvent(cost: number, currency: string): void {
+  wsServer.broadcast({
+    type: "cost",
+    cost,
+    currency,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * パイプラインプログレスをブロードキャスト（OmniVoice batch pipeline由来）
+ */
+export function broadcastProgress(
+  pipelineId: string,
+  stage: string,
+  current: number,
+  total: number,
+  status: "running" | "completed" | "failed"
+): void {
+  wsServer.broadcast({
+    type: "progress",
+    pipelineId,
+    stage,
+    current,
+    total,
+    percent: total > 0 ? Math.round((current / total) * 100) : 0,
+    status,
+    timestamp: Date.now(),
+  });
+}
+
+export { WebSocketServer, WS_PORT };
