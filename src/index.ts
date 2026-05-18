@@ -230,16 +230,19 @@ registerCommand("kanban", async (args) => {
 });
 
 registerCommand("update", async (args) => {
-  const { autoUpdater } = await import("./auto-update");
+  const { updateManager } = await import("./auto-update");
   if (args === "apply") {
-    const result = autoUpdater.applyUpdate();
-    if (result.success && result.restartRequired) {
-      setTimeout(() => autoUpdater.restart(), 2000);
-      return `${result.message}\n\n2秒後に再起動します…`;
+    const result = await updateManager.performUpdate();
+    if (result.success) {
+      return `✅ アップデート成功: ${result.previousVersion} → ${result.newVersion}`;
     }
-    return result.message;
+    return result.error ? `❌ ${result.error}` : "❌ アップデート失敗";
   }
-  return autoUpdater.formatInfo();
+  if (args === "check") {
+    const info = await updateManager.checkForUpdate();
+    return updateManager.formatInfo(info);
+  }
+  return updateManager.formatInfo(await updateManager.checkForUpdate());
 });
 
 registerCommand("plugins", async () => {
@@ -820,6 +823,41 @@ registerCommand("skills", async (args) => {
   const { skillSystem } = await import("./skills-system");
   const category = args?.toLowerCase();
   return skillSystem.formatSkills(category);
+});
+
+// ==================== v1.28: 未統合ファイル修復 ====================
+
+registerCommand("sandbox", async (args) => {
+  const { codeSandbox } = await import("./code-sandbox");
+  return "📦 **コードサンドボックス**\n安全なコード実行環境";
+});
+
+registerCommand("watch", async () => {
+  const { listWatches } = await import("./file-watcher");
+  const watches = listWatches();
+  return watches.length > 0
+    ? `👁️ **ファイル監視 (${watches.length})**\n` + watches.map(w => `- ${w.path}`).join("\n")
+    : "👁️ アクティブな監視はありません";
+});
+
+registerCommand("locals", async () => {
+  const { localAI } = await import("./local-ai");
+  return `🖥️ **ローカルAI**\n利用可能なローカルAIモデルの管理`;
+});
+
+registerCommand("api", async () => {
+  const { restServer } = await import("./rest-api");
+  return `🌐 **REST API**\nポート: ${restServer["port"] ?? "未起動"}`;
+});
+
+registerCommand("text", async () => {
+  const { textInputManager } = await import("./text-input");
+  return textInputManager.formatStatus();
+});
+
+registerCommand("ws", async () => {
+  const { wsServer } = await import("./websocket-server");
+  return `🔌 **WebSocket**\nポート: ${wsServer["port"] ?? "未起動"}`;
 });
 
 // ==================== メッセージプリプロセッサ ====================
