@@ -1109,6 +1109,15 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
+  // v1.38: メモリパイプライン初期化（agentmemory由来）
+  try {
+    const { initMemoryPipeline, observeMemory } = await import("./memory");
+    initMemoryPipeline();
+    logger.info("[Memory] 4-Tierメモリパイプライン初期化: ハイブリッド検索(BM25+Vector+Graph+RRF)");
+  } catch (err) {
+    logger.warn("[Startup] メモリパイプライン初期化に失敗:", err);
+  }
+
   logger.info(" /redirect /meet-agent /runtime /whatsapp /shell");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 

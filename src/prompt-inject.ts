@@ -299,7 +299,47 @@ export function removeRule(id: string): boolean {
   return true;
 }
 
-// ==================== フォーマット ====================
+// ==================== 意図抽出（prompt-master由来） ====================
+
+import { extractIntent, diagnosePrompt, formatDiagnosis, buildPrompt } from "./prompt-engine";
+
+/**
+ * ユーザー入力から意図を抽出（prompt-master 9次元）
+ */
+export function analyzeIntent(input: string, model?: string) {
+  return extractIntent(input, model);
+}
+
+/**
+ * プロンプト品質診断（prompt-master 37パターン）
+ */
+export function diagnoseInputQuality(input: string, model?: string): string {
+  const issues = diagnosePrompt(input, { model });
+  if (issues.length === 0) return "✅ 問題なし。プロンプト品質良好。";
+  return formatDiagnosis(issues);
+}
+
+/**
+ * 入力の完全分析（セキュリティ + 意図 + 品質）
+ */
+export function analyzeInput(input: string, model?: string): {
+  security: ScanResult;
+  intent: ReturnType<typeof extractIntent>;
+  diagnosis: string;
+  suggestedTemplate: string;
+} {
+  const security = scanInput(input);
+  const intent = extractIntent(input, model);
+  const diagnosis = diagnoseInputQuality(input, model);
+  const prompt = buildPrompt(input, { model });
+
+  return {
+    security,
+    intent,
+    diagnosis,
+    suggestedTemplate: `推奨テンプレート: ${prompt.slice(0, 100)}...`,
+  };
+}
 
 export function formatScanResult(result: ScanResult): string | null {
   if (result.safe && result.action === "allow") return null;

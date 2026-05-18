@@ -183,6 +183,57 @@ class ProviderRouter {
   }
 }
 
+// ==================== Zodツールスキーマ（clawpatch由来） ====================
+
+import { z } from "zod";
+import { zodToLLMSchema } from "./json-schema-bridge";
+import type { ToolDescriptor } from "./types";
+
+/**
+ * Zodスキーマから型安全なツール記述子を生成
+ * 従来の生JSON parametersより堅牢で保守性が高い
+ */
+export function createZodTool(
+  name: string,
+  description: string,
+  schema: z.ZodObject<any>,
+  execute: (args: Record<string, unknown>) => Promise<string>,
+  options?: { emoji?: string; owner?: "core" | "plugin" | "mcp" }
+): ToolDescriptor {
+  return {
+    name,
+    emoji: options?.emoji ?? "🔧",
+    owner: options?.owner ?? "core",
+    description,
+    parameters: zodToLLMSchema(schema) as Record<string, unknown>,
+    async execute(args) {
+      const parsed = schema.safeParse(args);
+      if (!parsed.success) {
+        return `[エラー] パラメータ不正: ${parsed.error.message}`;
+      }
+      return execute(parsed.data);
+    },
+  };
+}
+
+/**
+ * 構造化出力スキーマを生成（LLMのresponse_format用）
+ * clawpatch: providerJsonSchema相当
+ */
+export function createStructuredOutputSchema<T extends z.ZodType>(
+  schema: T,
+  name: string = "structured_output"
+): Record<string, unknown> {
+  return {
+    type: "json_schema",
+    json_schema: {
+      name,
+      schema: zodToLLMSchema(schema),
+      strict: true,
+    },
+  };
+}
+
 // ==================== シングルトン ====================
 
 export const providerRouter = new ProviderRouter();
