@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.20: Harness + SecurityAudit + BackgroundReview + PromptCache + FileSafety
+// v1.21: Reflection + SchedulerGate + Accessibility + Integrations + Onboarding
 // ==========================================
 
 import "dotenv/config";
@@ -521,6 +521,81 @@ registerCommand("safety", async (args) => {
   return cmds["/safety"] ? cmds["/safety"](args ? args.split(" ") : []) : "❌ コマンドエラー";
 });
 
+// ==================== v1.21: 第20弾コマンド ====================
+
+registerCommand("reflect", async (args) => {
+  const { reflectionEngine } = await import("./reflection");
+  if (!args) {
+    const recent = reflectionEngine.getRecent(5);
+    return recent.length === 0 ? "📭 リフレクションはありません" :
+      "💭 **直近のリフレクション**\n\n" + recent.map(r => reflectionEngine.formatReflection(r)).join("\n\n");
+  }
+  return "💭 " + args;
+});
+
+registerCommand("gate", async () => {
+  const { schedulerGate } = await import("./scheduler-gate");
+  return schedulerGate.formatStats();
+});
+
+registerCommand("a11y", async (args) => {
+  const { accessibilityManager } = await import("./accessibility");
+  const sub = args?.toLowerCase();
+  if (sub === "sr" || sub === "reader") {
+    accessibilityManager.setMode("screen_reader");
+    return "♿ スクリーンリーダーモードを有効化しました";
+  }
+  if (sub === "hc" || sub === "contrast") {
+    accessibilityManager.setMode("high_contrast");
+    return "👁️ ハイコントラストモードを有効化しました";
+  }
+  return accessibilityManager.formatConfig();
+});
+
+registerCommand("integrations", async (args) => {
+  const { integrationManager } = await import("./integrations");
+  const sub = args?.toLowerCase();
+  if (sub === "check" || sub === "status") {
+    const statuses = await integrationManager.checkAll();
+    return integrationManager.formatStatuses(statuses);
+  }
+  return "🔌 **連携コマンド**\n/integrations status — 連携状態";
+});
+
+registerCommand("onboard", async (args) => {
+  const { onboardingManager } = await import("./onboarding");
+  const sub = args?.toLowerCase();
+
+  if (sub === "start") {
+    const state = onboardingManager.start("user");
+    const msg = onboardingManager.getCurrentMessage("user")!;
+    return onboardingManager.formatMessage(msg) + "\n\n`/onboard next` で次へ";
+  }
+
+  if (sub === "next") {
+    const msg = onboardingManager.advance("user");
+    if (!msg) return "✅ オンボーディングは完了しています";
+    return onboardingManager.formatMessage(msg);
+  }
+
+  if (sub === "skip") {
+    onboardingManager.skipAll("user");
+    return "⏭️ オンボーディングをスキップしました";
+  }
+
+  if (sub === "status") {
+    const state = onboardingManager.getState("user");
+    if (!state) return "📭 オンボーディングは開始されていません";
+    return onboardingManager.formatState(state);
+  }
+
+  return "📋 **オンボーディング**\n" +
+    "/onboard start — 開始\n" +
+    "/onboard next — 次のステップ\n" +
+    "/onboard skip — スキップ\n" +
+    "/onboard status — 状態確認";
+});
+
 // ==================== v1.18: 新モジュールコマンド ====================
 
 registerCommand("threads", async (args) => {
@@ -617,8 +692,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.20 起動中…");
-  logger.info(" Harness / SecurityAudit / BackgroundReview / PromptCache / FileSafety");
+  logger.info(" Aikata v1.21 起動中…");
+  logger.info(" Reflection / SchedulerGate / Accessibility / Integrations / Onboarding");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -710,7 +785,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /harness /audit /review /cache /safety");
+  logger.info(" /reflect /gate /a11y /integrations /onboard");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
