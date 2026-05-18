@@ -1,387 +1,388 @@
 // ==========================================
-// Aikata - Token Juice（OpenHuman tokenjuice由来）
-// 定形ツール出力（git/npm/docker/cargo等）を自動圧縮
-// トークン消費を直接削減
+// Aikata - TokenJuice Terminal Output Compaction（OpenHuman tokenjuice/ 完全移植）
+// LLMコンテキスト節約のためのターミナル出力圧縮エンジン
+// 3層ルール・ANSI除去・重複行削減・インライン要約
 // ==========================================
 
 import { logger } from "./utils/logger";
-import { stripAnsi } from "./ansi-strip";
 
-// ==================== ルール定義 ====================
+// ==================== 型定義 ====================
 
-interface JuiceRule {
-  id: string;
-  family: string;
-  toolNames?: string[];
-  argv0?: string[];
+export interface CompactRule {
+  toolName?: string;
+  argv0?: string;
   argvIncludes?: string[];
   commandIncludes?: string[];
-  skipPatterns?: RegExp[];
-  keepPatterns?: RegExp[];
-  transforms?: {
-    stripAnsi?: boolean;
-    dedupeAdjacent?: boolean;
-    trimEmptyEdges?: boolean;
-    prettyPrintJson?: boolean;
-  };
+  skipPatterns?: string[];
+  keepPatterns?: string[];
+  stripAnsi?: boolean;
+  trimEmptyEdges?: boolean;
+  dedupeAdjacent?: boolean;
+  prettyPrintJson?: boolean;
   headLines?: number;
   tailLines?: number;
-  failureOverride?: { maxLines?: number };
-  counters?: Array<{ name: string; pattern: RegExp }>;
-  /** 定型メッセージ完全一致で短絡 */
-  matchOutput?: RegExp;
+  counters?: Array<{ pattern: string; label: string }>;
 }
 
-// ==================== 組み込みルール ====================
+export interface CompactResult {
+  text: string;
+  tokenSavings: number;
+  matchedRules: string[];
+  originalLength: number;
+  compressedLength: number;
+}
 
-const BUILTIN_RULES: JuiceRule[] = [
-  // === git ===
-  {
-    id: "git__status",
-    family: "git",
-    commandIncludes: ["git status"],
-    transforms: { stripAnsi: true, dedupeAdjacent: true },
-    headLines: 10, tailLines: 5,
+interface ClassifiedRule {
+  rule: CompactRule;
+  specificity: number;
+  name: string;
+}
+
+// ==================== ビルトインルール ====================
+
+const BUILTIN_RULES: Record<string, CompactRule> = {
+  "generic/fallback": {
+    stripAnsi: true,
+    trimEmptyEdges: true,
+    dedupeAdjacent: true,
+  },
+  "git/status": {
+    toolName: "terminal",
+    argvIncludes: ["git", "status"],
+    stripAnsi: true,
+    trimEmptyEdges: true,
+    headLines: 5,
+    tailLines: 10,
+  },
+  "git/branch": {
+    toolName: "terminal",
+    argvIncludes: ["git", "branch"],
+    stripAnsi: true,
+    headLines: 20,
+    tailLines: 5,
+  },
+  "git/diff": {
+    toolName: "terminal",
+    argvIncludes: ["git", "diff"],
+    stripAnsi: true,
+    headLines: 30,
+    tailLines: 30,
     counters: [
-      { name: "modified", pattern: /modified:\s+/g },
-      { name: "untracked", pattern: /\?\?/g },
-      { name: "deleted", pattern: /deleted:\s+/g },
+      { pattern: "^@@", label: "hunks" },
+      { pattern: "^\\+", label: "added" },
+      { pattern: "^\\-", label: "removed" },
     ],
   },
-  {
-    id: "git__log-oneline",
-    family: "git",
-    commandIncludes: ["git log --oneline", "git log --pretty=oneline"],
-    transforms: { stripAnsi: true },
-    headLines: 20, tailLines: 5,
-    counters: [{ name: "commits", pattern: /^[a-f0-9]+/gm }],
+  "npm/install": {
+    toolName: "terminal",
+    argvIncludes: ["npm", "install"],
+    stripAnsi: true,
+    headLines: 10,
+    tailLines: 5,
+    keepPatterns: ["error", "warn", "added", "removed"],
   },
-  {
-    id: "git__diff-stat",
-    family: "git",
-    commandIncludes: ["git diff --stat", "git diffstat"],
-    transforms: { stripAnsi: true },
-    headLines: 15, tailLines: 0,
+  "generic/help": {
+    toolName: "terminal",
+    argvIncludes: ["--help", "-h"],
+    stripAnsi: true,
+    headLines: 15,
+    tailLines: 10,
   },
-  {
-    id: "git__branch",
-    family: "git",
-    commandIncludes: ["git branch"],
-    transforms: { stripAnsi: true, dedupeAdjacent: true },
-    headLines: 20, tailLines: 0,
+  "ls": {
+    toolName: "terminal",
+    argv0: "ls",
+    stripAnsi: true,
+    headLines: 20,
+    tailLines: 5,
   },
-  {
-    id: "git__show",
-    family: "git",
-    commandIncludes: ["git show"],
-    transforms: { stripAnsi: true },
-    headLines: 30, tailLines: 10,
+  "cargo/build": {
+    toolName: "terminal",
+    argvIncludes: ["cargo", "build"],
+    headLines: 5,
+    tailLines: 5,
+    counters: [
+      { pattern: "Compiling", label: "compiled" },
+      { pattern: "error", label: "errors" },
+      { pattern: "warning", label: "warnings" },
+    ],
   },
-  {
-    id: "git__diff-name-only",
-    family: "git",
-    commandIncludes: ["git diff --name-only"],
-    transforms: { stripAnsi: true, dedupeAdjacent: true },
-    headLines: 30, tailLines: 0,
-    counters: [{ name: "files", pattern: /^.+$/gm }],
+  "docker/build": {
+    toolName: "terminal",
+    argvIncludes: ["docker", "build"],
+    headLines: 10,
+    tailLines: 5,
+    keepPatterns: ["error", "successfully", "exported"],
   },
+};
 
-  // === npm/pnpm/yarn ===
-  {
-    id: "install__npm-install",
-    family: "install",
-    commandIncludes: ["npm install", "npm i "],
-    transforms: { stripAnsi: true },
-    headLines: 5, tailLines: 3,
-    matchOutput: /up to date|added \d+|removed \d+/,
-  },
-  {
-    id: "install__pnpm-install",
-    family: "install",
-    commandIncludes: ["pnpm install", "pnpm i "],
-    transforms: { stripAnsi: true },
-    headLines: 5, tailLines: 3,
-    matchOutput: /up to date|Already up to date/,
-  },
+/** ユーザールールのストア */
+const userRules: CompactRule[] = [];
+const projectRules: CompactRule[] = [];
 
-  // === cargo ===
-  {
-    id: "build__cargo",
-    family: "build",
-    commandIncludes: ["cargo build", "cargo check", "cargo test"],
-    transforms: { stripAnsi: true, dedupeAdjacent: true },
-    headLines: 10, tailLines: 5,
-    matchOutput: /Compiling|Finished|error|warning/,
-  },
+// ==================== テキスト処理 ====================
 
-  // === docker ===
-  {
-    id: "devops__docker-ps",
-    family: "devops",
-    commandIncludes: ["docker ps"],
-    transforms: { stripAnsi: true, prettyPrintJson: true },
-    headLines: 20, tailLines: 0,
-    counters: [{ name: "containers", pattern: /^[a-f0-9]{12}\s/gm }],
-  },
-  {
-    id: "devops__docker-images",
-    family: "devops",
-    commandIncludes: ["docker images"],
-    transforms: { stripAnsi: true },
-    headLines: 20, tailLines: 0,
-    counters: [{ name: "images", pattern: /^[a-z0-9]+\s/gm }],
-  },
-  {
-    id: "devops__docker-compose",
-    family: "devops",
-    commandIncludes: ["docker compose", "docker-compose"],
-    transforms: { stripAnsi: true },
-    headLines: 10, tailLines: 5,
-  },
-
-  // === system ===
-  {
-    id: "system__ls",
-    family: "filesystem",
-    commandIncludes: ["ls ", "ls -la"],
-    transforms: { stripAnsi: true },
-    headLines: 40, tailLines: 0,
-    counters: [{ name: "entries", pattern: /^[-dl]/gm }],
-  },
-  {
-    id: "system__ps",
-    family: "system",
-    commandIncludes: ["ps aux", "ps -ef"],
-    transforms: { stripAnsi: true },
-    headLines: 25, tailLines: 0,
-    counters: [{ name: "processes", pattern: /^[\w]/gm }],
-  },
-  {
-    id: "system__df",
-    family: "system",
-    commandIncludes: ["df -h", "df "],
-    transforms: { stripAnsi: true },
-    headLines: 15, tailLines: 0,
-  },
-  {
-    id: "system__du",
-    family: "system",
-    commandIncludes: ["du -sh", "du -h"],
-    transforms: { stripAnsi: true },
-    headLines: 25, tailLines: 0,
-  },
-  {
-    id: "system__find",
-    family: "filesystem",
-    commandIncludes: ["find "],
-    transforms: { stripAnsi: true, dedupeAdjacent: true },
-    headLines: 25, tailLines: 5,
-    counters: [{ name: "results", pattern: /^/gm }],
-  },
-
-  // === search ===
-  {
-    id: "search__grep",
-    family: "search",
-    commandIncludes: ["grep ", "rg ", "ag "],
-    transforms: { stripAnsi: true },
-    headLines: 30, tailLines: 10,
-    counters: [{ name: "matches", pattern: /^[\w/]/gm }],
-  },
-
-  // === network ===
-  {
-    id: "network__curl",
-    family: "network",
-    commandIncludes: ["curl "],
-    transforms: { stripAnsi: true },
-    headLines: 30, tailLines: 10,
-  },
-
-  // === tests ===
-  {
-    id: "tests__vitest",
-    family: "tests",
-    commandIncludes: ["vitest", "npx vitest"],
-    transforms: { stripAnsi: true },
-    headLines: 15, tailLines: 10,
-    matchOutput: /PASS|FAIL|Tests\s+\d+/,
-  },
-  {
-    id: "tests__jest",
-    family: "tests",
-    commandIncludes: ["jest", "npx jest"],
-    transforms: { stripAnsi: true },
-    headLines: 15, tailLines: 10,
-    matchOutput: /PASS|FAIL|Tests:/,
-  },
-
-  // === generic fallback ===
-  {
-    id: "generic__fallback",
-    family: "generic",
-    transforms: { stripAnsi: true, dedupeAdjacent: true, trimEmptyEdges: true },
-    headLines: 40, tailLines: 20,
-    failureOverride: { maxLines: 5 },
-  },
-];
-
-// ==================== Juiceエンジン ====================
-
-interface JuiceResult {
-  text: string;
-  originalLines: number;
-  finalLines: number;
-  counters: Record<string, number>;
-  ruleId: string;
+/** ANSIエスケープシーケンスを除去（ECMA-48完全版） */
+function stripAnsi(text: string): string {
+  return text.replace(/[\u001b\u009b][[\]()#;?]*(?:(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PRZcf-nq-uy=><~]))/g, "");
 }
 
-/**
- * ツール出力を自動圧縮
- * パススルー条件:
- * - 512バイト未満 → そのまま（圧縮するほど小さくない）
- * - 圧縮後のサイズが元の95%以上 → そのまま（圧縮効果なし）
- */
-export function juiceOutput(commandHint: string, output: string): JuiceResult {
-  const originalLines = output.split("\n").length;
-  const originalBytes = output.length;
+/** 空行のトリミング（先頭・末尾） */
+function trimEmptyEdges(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length - 1;
+  while (start < lines.length && lines[start]!.trim() === "") start++;
+  while (end > start && lines[end]!.trim() === "") end--;
+  return lines.slice(start, end + 1);
+}
 
-  // 小さすぎる出力はパススルー
-  if (originalBytes < 512) {
-    return { text: output, originalLines, finalLines: originalLines, counters: {}, ruleId: "passthrough" };
+/** 隣接重複行の削除 */
+function dedupeAdjacent(lines: string[]): string[] {
+  return lines.filter((line, i) => i === 0 || line !== lines[i - 1]);
+}
+
+/** カウンター（行数集計） */
+function countLines(lines: string[], patterns: Array<{ pattern: string; label: string }>): string {
+  const counts: Record<string, number> = {};
+  for (const { pattern, label } of patterns) {
+    const re = new RegExp(pattern);
+    counts[label] = lines.filter((l) => re.test(l)).length;
   }
+  return Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .map(([label, count]) => `${label}: ${count}`)
+    .join(", ");
+}
 
-  // ルールマッチング
-  const rule = matchRule(commandHint, output);
+// ==================== コアエンジン ====================
 
-  if (!rule) {
-    // マッチなし → シンプルなtrimのみ
-    const trimmed = trimOutput(output, 40, 20);
-    const finalLines = trimmed.split("\n").length;
-    return { text: trimmed, originalLines, finalLines, counters: {}, ruleId: "none" };
-  }
+/** ツール実行入力を分類 */
+function classifyExecution(
+  toolName: string,
+  command?: string,
+): ClassifiedRule[] {
+  const argv0 = command?.split(/\s+/)[0];
+  const argv = command?.split(/\s+/) || [];
+  const scored: ClassifiedRule[] = [];
 
-  // トランスフォーム適用
-  let text = output;
+  for (const [name, rule] of Object.entries(BUILTIN_RULES)) {
+    let specificity = 0;
 
-  if (rule.transforms?.stripAnsi) {
-    text = stripAnsi(text);
-  }
+    if (rule.toolName && rule.toolName === toolName) specificity += 10;
+    if (rule.argv0 && rule.argv0 === argv0) specificity += 20;
+    if (rule.argvIncludes) {
+      const matchCount = rule.argvIncludes.filter((a) => argv.includes(a)).length;
+      if (matchCount === rule.argvIncludes.length) specificity += 15 * matchCount;
+    }
+    if (rule.commandIncludes) {
+      const matchCount = rule.commandIncludes.filter((c) => command?.includes(c)).length;
+      if (matchCount > 0) specificity += 5 * matchCount;
+    }
 
-  // 定型出力マッチ → 短絡
-  if (rule.matchOutput && !rule.matchOutput.test(text)) {
-    // マッチするパターンがない場合も処理続行
-  }
-
-  // skipPatterns の行を除去
-  if (rule.skipPatterns) {
-    const lines = text.split("\n");
-    text = lines.filter(line => !rule.skipPatterns!.some(p => p.test(line))).join("\n");
-  }
-
-  if (rule.transforms?.trimEmptyEdges) {
-    text = text.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "");
-  }
-
-  if (rule.transforms?.dedupeAdjacent) {
-    text = dedupeAdjacent(text);
-  }
-
-  // カウンター
-  const counters: Record<string, number> = {};
-  if (rule.counters) {
-    for (const c of rule.counters) {
-      const matches = text.match(c.pattern);
-      counters[c.name] = matches ? matches.length : 0;
+    if (specificity > 0) {
+      scored.push({ rule, specificity, name });
     }
   }
 
-  // ヘッド/テール抽出
-  const failureMode = rule.failureOverride && /error|fail|abort/i.test(text);
-  const maxHead = failureMode && rule.failureOverride?.maxLines
-    ? rule.failureOverride.maxLines : rule.headLines || 20;
-  const maxTail = failureMode ? 0 : rule.tailLines || 10;
-
-  text = trimOutput(text, maxHead, maxTail);
-
-  // カウンターサマリを先頭に追加
-  const counterSummary = Object.keys(counters).length > 0
-    ? `[${Object.entries(counters).map(([k, v]) => `${k}: ${v}`).join(", ")}] `
-    : "";
-
-  if (counterSummary) {
-    text = counterSummary + "\n" + text;
+  // ユーザールールも追加
+  for (let i = 0; i < userRules.length; i++) {
+    scored.push({ rule: userRules[i]!, specificity: 5, name: `user/${i}` });
   }
 
-  // 圧縮効果チェック
-  const finalLines = text.split("\n").length;
-  const finalBytes = text.length;
-
-  if (finalBytes > originalBytes * 0.95) {
-    // 圧縮効果がない → 元のまま
-    return { text: output, originalLines, finalLines: originalLines, counters, ruleId: rule.id };
+  // プロジェクトルールも追加
+  for (let i = 0; i < projectRules.length; i++) {
+    scored.push({ rule: projectRules[i]!, specificity: 8, name: `project/${i}` });
   }
 
-  logger.debug(`TokenJuice: ${rule.id} ${originalLines}→${finalLines}行 (${originalBytes}→${finalBytes}B)`);
+  // 常にフォールバックルールを含める
+  scored.push({ rule: BUILTIN_RULES["generic/fallback"]!, specificity: 0, name: "generic/fallback" });
 
-  return { text, originalLines, finalLines, counters, ruleId: rule.id };
+  scored.sort((a, b) => b.specificity - a.specificity);
+  return scored.slice(0, 3); // 上位3つまで
 }
 
-// ==================== ルールマッチング ====================
+/** 出力を圧縮 */
+export function compactOutput(
+  output: string,
+  toolName?: string,
+  command?: string,
+): CompactResult {
+  const originalLength = output.length;
+  const classified = toolName ? classifyExecution(toolName, command) : [];
+  const matchedRules: string[] = [];
 
-function matchRule(command: string, output: string): JuiceRule | undefined {
-  // まずspecificなルールから
-  for (const rule of BUILTIN_RULES) {
-    if (rule.id === "generic__fallback") continue; // fallbackは最後
+  let text = output;
+  const lines = text.split("\n");
 
-    if (rule.commandIncludes) {
-      for (const inc of rule.commandIncludes) {
-        if (command.includes(inc)) {
-          return rule;
-        }
+  for (const { rule, name } of classified) {
+    matchedRules.push(name);
+    let processedLines = [...lines];
+
+    // ANSI除去
+    if (rule.stripAnsi) {
+      processedLines = processedLines.map((l) => stripAnsi(l));
+    }
+
+    // スキップパターン
+    if (rule.skipPatterns) {
+      processedLines = processedLines.filter(
+        (l) => !rule.skipPatterns!.some((p) => new RegExp(p).test(l)),
+      );
+    }
+
+    // 保持パターン
+    if (rule.keepPatterns && rule.keepPatterns.length > 0) {
+      const kept = processedLines.filter(
+        (l) => rule.keepPatterns!.some((p) => new RegExp(p, "i").test(l)),
+      );
+      if (kept.length > 0) processedLines = kept;
+    }
+
+    // 空行トリミング
+    if (rule.trimEmptyEdges) {
+      processedLines = trimEmptyEdges(processedLines);
+    }
+
+    // 重複行削除
+    if (rule.dedupeAdjacent) {
+      processedLines = dedupeAdjacent(processedLines);
+    }
+
+    // カウンター集計
+    let counterStr = "";
+    if (rule.counters && rule.counters.length > 0) {
+      counterStr = countLines(processedLines, rule.counters);
+    }
+
+    // ヘッド/テール切り詰め
+    if (rule.headLines || rule.tailLines) {
+      const head = rule.headLines ?? 0;
+      const tail = rule.tailLines ?? 0;
+      if (head + tail < processedLines.length) {
+        const headLines = processedLines.slice(0, head);
+        const tailLines = processedLines.slice(-tail);
+        const hidden = processedLines.length - head - tail;
+        processedLines = [
+          ...headLines,
+          `… ${hidden} lines suppressed …`,
+          ...tailLines,
+        ];
       }
     }
-    if (rule.toolNames && rule.toolNames.some(t => command.startsWith(t))) {
-      return rule;
+
+    // カウンターを先頭行に追加
+    if (counterStr) {
+      processedLines = [`[${counterStr}]`, ...processedLines];
     }
+
+    text = processedLines.join("\n");
   }
 
-  // fallback（出力が3行以上ある場合のみ）
-  return BUILTIN_RULES.find(r => r.id === "generic__fallback");
-}
-
-// ==================== ユーティリティ ====================
-
-function dedupeAdjacent(text: string): string {
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let prev = "";
-  for (const line of lines) {
-    if (line !== prev) result.push(line);
-    prev = line;
+  // パススルー最適化：512bytes未満または圧縮率5%未満なら変更しない
+  if (originalLength < 512 || (originalLength - text.length) / originalLength < 0.05) {
+    return {
+      text: output,
+      tokenSavings: 0,
+      matchedRules,
+      originalLength,
+      compressedLength: originalLength,
+    };
   }
-  return result.join("\n");
-}
 
-function trimOutput(text: string, headLines: number, tailLines: number): string {
-  const lines = text.split("\n");
-  if (lines.length <= headLines + tailLines + 3) return text;
-
-  const head = lines.slice(0, headLines);
-  const tail = tailLines > 0 ? lines.slice(-tailLines) : [];
-  const skipped = lines.length - head.length - tail.length;
-
-  const parts = [head.join("\n")];
-  if (skipped > 0) parts.push(`…[${skipped}行省略]`);
-  if (tail.length > 0) parts.push(tail.join("\n"));
-
-  return parts.join("\n");
+  return {
+    text,
+    tokenSavings: Math.round((originalLength - text.length) / 4), // 大まかなトークン換算
+    matchedRules,
+    originalLength,
+    compressedLength: text.length,
+  };
 }
 
 // ==================== 公開API ====================
 
-export function setCustomRule(rule: JuiceRule): void {
-  BUILTIN_RULES.unshift(rule);
+/** 出力をコンパクトにフォーマット */
+export function formatCompactResult(result: CompactResult): string {
+  if (result.tokenSavings === 0) {
+    return `📄 出力: ${result.originalLength} chars (圧縮不要)`;
+  }
+  return [
+    `📄 **出力圧縮:**`,
+    `  元: ${result.originalLength} chars`,
+    `  後: ${result.compressedLength} chars`,
+    `  削減: ${result.tokenSavings} tokens (${((1 - result.compressedLength / result.originalLength) * 100).toFixed(1)}%)`,
+    `  適用ルール: ${result.matchedRules.join(", ")}`,
+  ].join("\n");
 }
 
-export { JuiceRule };
+/** ユーザールール追加 */
+export function addUserRule(name: string, rule: CompactRule): void {
+  userRules.push(rule);
+  logger.info(`[TokenJuice] ユーザールール追加: ${name}`);
+}
+
+/** ルール一覧 */
+export function listRules(): string {
+  const lines: string[] = ["📋 **TokenJuice Rules**"];
+  for (const [name] of Object.entries(BUILTIN_RULES)) {
+    lines.push(`  ✅ ${name}`);
+  }
+  if (userRules.length > 0) {
+    lines.push(`  👤 ユーザー定義: ${userRules.length}`);
+  }
+  return lines.join("\n");
+}
+
+// ==================== LLMセマフォ（協調型スロットリング） ====================
+
+interface SemaphoreSlot {
+  runtimeId: string;
+  acquiredAt: number;
+}
+
+let semaphoreSlots: SemaphoreSlot[] = [];
+const MAX_SLOTS = 1;
+let gateEnabled = true;
+
+/** LLM呼び出し前にスロットを確保 */
+export async function acquireLlmSlot(timeoutMs = 30000): Promise<boolean> {
+  if (!gateEnabled) return true;
+  const start = Date.now();
+
+  while (semaphoreSlots.length >= MAX_SLOTS) {
+    if (Date.now() - start > timeoutMs) return false;
+    await sleep(100);
+  }
+
+  semaphoreSlots.push({
+    runtimeId: `runtime_${Date.now()}`,
+    acquiredAt: Date.now(),
+  });
+
+  return true;
+}
+
+/** LLM呼び出し後にスロットを解放 */
+export function releaseLlmSlot(): void {
+  semaphoreSlots.pop();
+}
+
+/** ゲート有効/無効 */
+export function setGateEnabled(enabled: boolean): void {
+  gateEnabled = enabled;
+  if (!enabled) semaphoreSlots = [];
+  logger.info(`[LLM Gate] ${enabled ? "有効" : "無効"}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** 状態フォーマット */
+export function formatTokenJuiceStatus(): string {
+  return [
+    "🧃 **TokenJuice Engine**",
+    `  ビルトインルール: ${Object.keys(BUILTIN_RULES).length}`,
+    `  ユーザールール: ${userRules.length}`,
+    `  LLMセマフォ: ${semaphoreSlots.length}/${MAX_SLOTS}スロット使用中`,
+    `  ゲート: ${gateEnabled ? "ON" : "OFF"}`,
+  ].join("\n");
+}

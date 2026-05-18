@@ -1,656 +1,352 @@
 // ==========================================
-// Aikata - エラー分類器（Hermes Agent error_classifier.py 由来）
-// APIエラーの構造化分類・リカバリー戦略決定
+// Aikata - API Error Classifier（Hermes Agent error_classifier.py 完全移植）
+// 25カテゴリのAPIエラー分類＋リカバリー戦略
 // ==========================================
 
 import { logger } from "./utils/logger";
 
-// ==================== 型定義 ====================
+// ==================== エラー分類 ====================
 
-/** フェイルオーバー理由 */
-export enum FailoverReason {
-  Auth = "auth",
-  AuthPermanent = "auth_permanent",
-  Billing = "billing",
-  RateLimit = "rate_limit",
-  Overloaded = "overloaded",
-  ServerError = "server_error",
-  Timeout = "timeout",
-  ContextOverflow = "context_overflow",
-  PayloadTooLarge = "payload_too_large",
-  ImageTooLarge = "image_too_large",
-  ModelNotFound = "model_not_found",
-  ProviderPolicyBlocked = "provider_policy_blocked",
-  FormatError = "format_error",
-  LlamaCppGrammar = "llama_cpp_grammar_pattern",
-  Unknown = "unknown",
-}
+export type FailoverReason =
+  | "auth" | "auth_permanent"
+  | "billing" | "rate_limit"
+  | "overloaded" | "server_error"
+  | "timeout"
+  | "context_overflow" | "payload_too_large" | "image_too_large"
+  | "model_not_found" | "provider_policy_blocked"
+  | "format_error"
+  | "thinking_signature" | "long_context_tier"
+  | "oauth_long_context_beta_forbidden" | "llama_cpp_grammar_pattern"
+  | "unknown";
 
-/** 分類結果 */
 export interface ClassifiedError {
   reason: FailoverReason;
-  statusCode: number | null;
-  provider: string;
-  model: string;
+  statusCode?: number;
+  provider?: string;
+  model?: string;
   message: string;
-  errorContext: Record<string, unknown>;
   retryable: boolean;
   shouldCompress: boolean;
   shouldRotateCredential: boolean;
   shouldFallback: boolean;
-  isAuth: boolean;
 }
 
-// ==================== パターン ====================
+// ==================== パターン定義 ====================
 
 const BILLING_PATTERNS = [
-  "insufficient credits",
-  "insufficient_quota",
-  "insufficient balance",
-  "credit balance",
-  "credits have been exhausted",
-  "top up your credits",
-  "payment required",
-  "billing hard limit",
-  "exceeded your current quota",
-  "account is deactivated",
-  "plan does not include",
+  "insufficient credits", "insufficient_quota", "insufficient balance",
+  "credit balance", "credits have been exhausted", "top up your credits",
+  "payment required", "billing hard limit", "exceeded your current quota",
+  "account is deactivated", "plan does not include",
 ];
 
 const RATE_LIMIT_PATTERNS = [
-  "rate limit",
-  "rate_limit",
-  "too many requests",
-  "throttled",
-  "requests per minute",
-  "tokens per minute",
-  "try again in",
-  "please retry after",
-  "resource_exhausted",
-  "throttlingexception",
-  "too many concurrent",
+  "rate limit", "rate_limit", "too many requests", "throttled",
+  "requests per minute", "tokens per minute", "requests per day",
+  "try again in", "please retry after", "resource_exhausted",
+  "rate increased too quickly", "throttlingexception",
+  "too many concurrent requests", "servicequotaexceededexception",
 ];
 
-const USAGE_LIMIT_PATTERNS = [
-  "usage limit",
-  "quota",
-  "limit exceeded",
-  "key limit exceeded",
-];
+const USAGE_LIMIT_PATTERNS = ["usage limit", "quota", "limit exceeded", "key limit exceeded"];
+const USAGE_LIMIT_TRANSIENT_SIGNALS = ["try again", "retry", "resets at", "reset in", "wait", "requests remaining", "periodic", "window"];
 
-const USAGE_LIMIT_TRANSIENT_SIGNALS = [
-  "try again",
-  "retry",
-  "resets at",
-  "reset in",
-  "wait",
-  "requests remaining",
-  "periodic",
-  "window",
-];
+const PAYLOAD_TOO_LARGE_PATTERNS = ["request entity too large", "payload too large", "error code: 413"];
+const IMAGE_TOO_LARGE_PATTERNS = ["image exceeds", "image too large", "image_too_large", "image size exceeds"];
 
 const CONTEXT_OVERFLOW_PATTERNS = [
-  "context length",
-  "context size",
-  "maximum context",
-  "token limit",
-  "too many tokens",
-  "reduce the length",
-  "exceeds the limit",
-  "context window",
-  "prompt is too long",
-  "prompt exceeds max length",
-  "max_tokens",
-  "maximum number of tokens",
-  "max_model_len",
-  "input is too long",
-  "maximum model length",
-  "context length exceeded",
-  "超过最大长度",
-  "上下文长度",
+  "context length", "context size", "maximum context", "token limit",
+  "too many tokens", "reduce the length", "exceeds the limit",
+  "context window", "prompt is too long", "prompt exceeds max length",
+  "max_tokens", "maximum number of tokens", "exceeds the max_model_len",
+  "max_model_len", "prompt length", "input is too long",
+  "maximum model length", "context length exceeded",
+  "truncating input", "slot context", "n_ctx_slot",
+  "超过最大长度", "上下文长度",
+  "max input token", "input token",
   "exceeds the maximum number of input tokens",
 ];
 
 const MODEL_NOT_FOUND_PATTERNS = [
-  "is not a valid model",
-  "invalid model",
-  "model not found",
-  "model_not_found",
-  "does not exist",
-  "no such model",
-  "unknown model",
-  "unsupported model",
+  "is not a valid model", "invalid model", "model not found",
+  "model_not_found", "does not exist", "no such model",
+  "unknown model", "unsupported model",
 ];
 
 const PROVIDER_POLICY_BLOCKED_PATTERNS = [
   "no endpoints available matching your guardrail",
   "no endpoints available matching your data policy",
+  "no endpoints found matching your data policy",
 ];
 
 const AUTH_PATTERNS = [
-  "invalid api key",
-  "invalid_api_key",
-  "authentication",
-  "unauthorized",
-  "forbidden",
-  "invalid token",
-  "token expired",
-  "token revoked",
-  "access denied",
+  "invalid api key", "invalid_api_key", "authentication",
+  "unauthorized", "forbidden", "invalid token", "token expired",
+  "token revoked", "access denied",
 ];
 
 const TIMEOUT_MESSAGE_PATTERNS = [
-  "timed out",
-  "turn timed out",
-  "request timed out",
-  "deadline exceeded",
-  "operation timed out",
-  "upstream timed out",
-];
-
-const IMAGE_TOO_LARGE_PATTERNS = [
-  "image exceeds",
-  "image too large",
-  "image_too_large",
-  "image size exceeds",
+  "timed out", "turn timed out", "request timed out",
+  "deadline exceeded", "operation timed out", "upstream timed out",
 ];
 
 const TRANSPORT_ERROR_TYPES = new Set([
-  "ReadTimeout", "ConnectTimeout", "PoolTimeout",
-  "ConnectError", "RemoteProtocolError",
-  "ConnectionError", "ConnectionResetError",
-  "ConnectionAbortedError", "BrokenPipeError",
-  "TimeoutError", "ReadError",
-  "ServerDisconnectedError",
-  "SSLError", "SSLEOFError",
-  "APIConnectionError", "APITimeoutError",
+  "readtimeout", "connecttimeout", "pooltimeout",
+  "connecterror", "remoteprotocolerror",
+  "connectionerror", "connectionreseterror",
+  "connectionabortederror", "brokenerror",
+  "timeouterror", "readerror",
+  "serverdisconnectederror",
 ]);
 
-const SSL_TRANSIENT_PATTERNS = [
-  "bad record mac",
-  "ssl alert",
-  "tls alert",
-  "ssl handshake failure",
-  "bad_record_mac",
-  "ssl_alert",
-  "tls_alert",
-  "[ssl:",
+const SERVER_DISCONNECT_PATTERNS = [
+  "server disconnected", "peer closed connection",
+  "connection reset by peer", "connection was closed",
+  "network connection lost", "unexpected eof", "incomplete chunked read",
 ];
 
-// ==================== エラー分類エンジン ====================
+// ==================== 分類パイプライン ====================
 
-class ErrorClassifier {
-  private stats = {
-    totalClassified: 0,
-    byReason: new Map<FailoverReason, number>(),
-    recentErrors: [] as ClassifiedError[],
-  };
+export function classifyApiError(
+  error: Error,
+  provider = "",
+  model = "",
+  approxTokens = 0,
+  contextLength = 200000,
+  numMessages = 0,
+): ClassifiedError {
+  const statusCode = extractStatusCode(error);
+  const errorMsg = (error.message || "").toLowerCase();
+  const errorType = error.constructor.name.toLowerCase();
 
-  /** エラーを分類 */
-  classify(
-    error: Error | string,
-    options?: {
-      provider?: string;
-      model?: string;
-      statusCode?: number;
-      approxTokens?: number;
-      contextLength?: number;
-      numMessages?: number;
-    }
-  ): ClassifiedError {
-    this.stats.totalClassified++;
+  // ヘルパー
+  const result = (reason: FailoverReason, overrides: Partial<ClassifiedError> = {}): ClassifiedError => ({
+    reason,
+    statusCode,
+    provider,
+    model,
+    message: error.message.slice(0, 500),
+    retryable: true,
+    shouldCompress: false,
+    shouldRotateCredential: false,
+    shouldFallback: false,
+    ...overrides,
+  });
 
-    const errorMsg =
-      typeof error === "string" ? error : (error.message ?? String(error));
-    const errorType = typeof error === "string" ? "" : error.constructor.name;
-    const errorMsgLower = errorMsg.toLowerCase();
+  // 1. プロバイダ固有パターン
+  if (statusCode === 400 && errorMsg.includes("signature") && errorMsg.includes("thinking")) {
+    return result("thinking_signature", { retryable: true });
+  }
+  if (statusCode === 429 && errorMsg.includes("extra usage") && errorMsg.includes("long context")) {
+    return result("long_context_tier", { retryable: true, shouldCompress: true });
+  }
+  if (statusCode === 400 && errorMsg.includes("long context beta") && errorMsg.includes("not yet available")) {
+    return result("oauth_long_context_beta_forbidden", { retryable: true });
+  }
+  if (statusCode === 400 && (errorMsg.includes("error parsing grammar") || errorMsg.includes("json-schema-to-grammar"))) {
+    return result("llama_cpp_grammar_pattern", { retryable: true });
+  }
 
-    const statusCode = options?.statusCode ?? null;
-    const provider = options?.provider ?? "unknown";
-    const model = options?.model ?? "unknown";
-    const approxTokens = options?.approxTokens ?? 0;
-    const contextLength = options?.contextLength ?? 200000;
-    const numMessages = options?.numMessages ?? 0;
+  // 2. HTTPステータスコード分類
+  if (statusCode !== undefined) {
+    const statusResult = classifyByStatus(statusCode, errorMsg, result);
+    if (statusResult) return statusResult;
+  }
 
-    const result = (reason: FailoverReason, overrides?: Partial<ClassifiedError>): ClassifiedError => {
-      const defaults: ClassifiedError = {
-        reason,
-        statusCode,
-        provider,
-        model,
-        message: errorMsg.slice(0, 500),
-        errorContext: {},
-        retryable: true,
-        shouldCompress: false,
-        shouldRotateCredential: false,
-        shouldFallback: false,
-        isAuth: false,
-      };
+  // 3. メッセージパターン分類
+  const msgResult = classifyByMessage(errorMsg, errorType, approxTokens, contextLength, result);
+  if (msgResult) return msgResult;
 
-      if (reason === FailoverReason.Auth || reason === FailoverReason.AuthPermanent) {
-        defaults.isAuth = true;
+  // 4. SSL/TLS一時エラー
+  if (/(bad record mac|ssl alert|tls alert|ssl handshake failure|tlsv1 alert)/i.test(errorMsg)) {
+    return result("timeout");
+  }
+
+  // 5. サーバーディスコネクト＋大規模セッション
+  const isDisconnect = SERVER_DISCONNECT_PATTERNS.some((p) => errorMsg.includes(p));
+  if (isDisconnect) {
+    const isLarge = approxTokens > contextLength * 0.6 ||
+      (contextLength <= 256000 && (approxTokens > 120000 || numMessages > 200));
+    if (isLarge) return result("context_overflow", { retryable: true, shouldCompress: true });
+    return result("timeout");
+  }
+
+  // 6. トランスポートエラー
+  if (TRANSPORT_ERROR_TYPES.has(errorType)) {
+    return result("timeout");
+  }
+
+  // 7. フォールバック
+  return result("unknown");
+}
+
+// ==================== ステータスコード分類 ====================
+
+function classifyByStatus(
+  statusCode: number,
+  errorMsg: string,
+  result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError,
+): ClassifiedError | null {
+  switch (statusCode) {
+    case 401:
+      return result("auth", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
+
+    case 403:
+      if (errorMsg.includes("key limit exceeded") || errorMsg.includes("spending limit")) {
+        return result("billing", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
       }
+      return result("auth", { retryable: false, shouldFallback: true });
 
-      const classified = { ...defaults, ...overrides };
-      this.recordStats(classified);
-      return classified;
-    };
-
-    // ── 1. HTTPステータスコード分類 ──
-
-    if (statusCode !== null) {
-      return this.classifyByStatus(
-        statusCode, errorMsgLower, provider, model,
-        approxTokens, contextLength, numMessages, result
-      );
-    }
-
-    // ── 2. メッセージパターンマッチ ──
-
-    return this.classifyByMessage(
-      errorMsgLower, errorType,
-      approxTokens, contextLength, result
-    );
-  }
-
-  /** 直近のエラーを取得 */
-  getRecentErrors(count = 10): ClassifiedError[] {
-    return this.stats.recentErrors.slice(-count);
-  }
-
-  /** 統計を取得 */
-  getStats() {
-    return {
-      totalClassified: this.stats.totalClassified,
-      byReason: new Map(this.stats.byReason),
-    };
-  }
-
-  /** 統計をリセット */
-  resetStats(): void {
-    this.stats.totalClassified = 0;
-    this.stats.byReason.clear();
-    this.stats.recentErrors = [];
-  }
-
-  // ---- ステータスコード分類 ----
-
-  private classifyByStatus(
-    statusCode: number,
-    msg: string,
-    provider: string,
-    model: string,
-    approxTokens: number,
-    contextLength: number,
-    numMessages: number,
-    result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError
-  ): ClassifiedError {
-    if (statusCode === 401) {
-      return result(FailoverReason.Auth, {
-        retryable: false,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    if (statusCode === 403) {
-      if (msg.includes("key limit exceeded") || msg.includes("spending limit")) {
-        return result(FailoverReason.Billing, {
-          retryable: false,
-          shouldRotateCredential: true,
-          shouldFallback: true,
-        });
+    case 402: {
+      const hasUsageLimit = USAGE_LIMIT_PATTERNS.some((p) => errorMsg.includes(p));
+      const hasTransient = USAGE_LIMIT_TRANSIENT_SIGNALS.some((p) => errorMsg.includes(p));
+      if (hasUsageLimit && hasTransient) {
+        return result("rate_limit", { shouldRotateCredential: true, shouldFallback: true });
       }
-      return result(FailoverReason.Auth, {
-        retryable: false,
-        shouldFallback: true,
-      });
+      return result("billing", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
     }
 
-    if (statusCode === 402) {
-      return this.classify402(msg, result);
-    }
-
-    if (statusCode === 404) {
-      if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => msg.includes(p))) {
-        return result(FailoverReason.ProviderPolicyBlocked, {
-          retryable: false,
-          shouldFallback: false,
-        });
+    case 404: {
+      if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => errorMsg.includes(p))) {
+        return result("provider_policy_blocked", { retryable: false, shouldFallback: false });
       }
-      if (MODEL_NOT_FOUND_PATTERNS.some((p) => msg.includes(p))) {
-        return result(FailoverReason.ModelNotFound, {
-          retryable: false,
-          shouldFallback: true,
-        });
+      if (MODEL_NOT_FOUND_PATTERNS.some((p) => errorMsg.includes(p))) {
+        return result("model_not_found", { retryable: false, shouldFallback: true });
       }
-      return result(FailoverReason.Unknown, { retryable: true });
+      return result("unknown", { retryable: true });
     }
 
-    if (statusCode === 413) {
-      return result(FailoverReason.PayloadTooLarge, {
-        retryable: true,
-        shouldCompress: true,
-      });
-    }
+    case 413:
+      return result("payload_too_large", { retryable: true, shouldCompress: true });
 
-    if (statusCode === 429) {
-      return result(FailoverReason.RateLimit, {
-        retryable: true,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
+    case 429:
+      return result("rate_limit", { shouldRotateCredential: true, shouldFallback: true });
 
-    if (statusCode === 400) {
-      return this.classify400(msg, approxTokens, contextLength, numMessages, result);
-    }
+    case 400:
+      return classify400(errorMsg, result);
 
-    if (statusCode === 500 || statusCode === 502) {
-      return result(FailoverReason.ServerError, { retryable: true });
-    }
+    case 500:
+    case 502:
+      return result("server_error");
 
-    if (statusCode === 503 || statusCode === 529) {
-      return result(FailoverReason.Overloaded, { retryable: true });
-    }
+    case 503:
+    case 529:
+      return result("overloaded");
 
-    if (statusCode >= 400 && statusCode < 500) {
-      return result(FailoverReason.FormatError, {
-        retryable: false,
-        shouldFallback: true,
-      });
-    }
-
-    if (statusCode >= 500 && statusCode < 600) {
-      return result(FailoverReason.ServerError, { retryable: true });
-    }
-
-    return result(FailoverReason.Unknown, { retryable: true });
-  }
-
-  // ---- 402 分類 ----
-
-  private classify402(
-    msg: string,
-    result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError
-  ): ClassifiedError {
-    const hasUsageLimit = USAGE_LIMIT_PATTERNS.some((p) => msg.includes(p));
-    const hasTransient = USAGE_LIMIT_TRANSIENT_SIGNALS.some((p) => msg.includes(p));
-
-    if (hasUsageLimit && hasTransient) {
-      return result(FailoverReason.RateLimit, {
-        retryable: true,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    return result(FailoverReason.Billing, {
-      retryable: false,
-      shouldRotateCredential: true,
-      shouldFallback: true,
-    });
-  }
-
-  // ---- 400 分類 ----
-
-  private classify400(
-    msg: string,
-    approxTokens: number,
-    contextLength: number,
-    numMessages: number,
-    result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError
-  ): ClassifiedError {
-    // Image too large (Anthropic 5MB per-image check)
-    if (IMAGE_TOO_LARGE_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ImageTooLarge, { retryable: true });
-    }
-
-    // Context overflow
-    if (CONTEXT_OVERFLOW_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ContextOverflow, {
-        retryable: true,
-        shouldCompress: true,
-      });
-    }
-
-    // Model not found as 400
-    if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ProviderPolicyBlocked, {
-        retryable: false,
-        shouldFallback: false,
-      });
-    }
-    if (MODEL_NOT_FOUND_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ModelNotFound, {
-        retryable: false,
-        shouldFallback: true,
-      });
-    }
-
-    // Rate limit / billing as 400
-    if (RATE_LIMIT_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.RateLimit, {
-        retryable: true,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-    if (BILLING_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.Billing, {
-        retryable: false,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    // Generic 400 + large session → probable context overflow
-    const isLarge = approxTokens > contextLength * 0.4 ||
-      (contextLength <= 256000 && (approxTokens > 80000 || numMessages > 80));
-
-    if (isLarge) {
-      return result(FailoverReason.ContextOverflow, {
-        retryable: true,
-        shouldCompress: true,
-      });
-    }
-
-    return result(FailoverReason.FormatError, {
-      retryable: false,
-      shouldFallback: true,
-    });
-  }
-
-  // ---- メッセージパターン分類 ----
-
-  private classifyByMessage(
-    msg: string,
-    errorType: string,
-    approxTokens: number,
-    contextLength: number,
-    result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError
-  ): ClassifiedError {
-    // SSL/TLS transient errors
-    if (SSL_TRANSIENT_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.Timeout, { retryable: true });
-    }
-
-    // Usage limit disambiguation
-    const hasUsageLimit = USAGE_LIMIT_PATTERNS.some((p) => msg.includes(p));
-    if (hasUsageLimit) {
-      const hasTransient = USAGE_LIMIT_TRANSIENT_SIGNALS.some((p) => msg.includes(p));
-      if (hasTransient) {
-        return result(FailoverReason.RateLimit, {
-          retryable: true,
-          shouldRotateCredential: true,
-          shouldFallback: true,
-        });
+    default:
+      if (statusCode >= 400 && statusCode < 500) {
+        return result("format_error", { retryable: false, shouldFallback: true });
       }
-      return result(FailoverReason.Billing, {
-        retryable: false,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    // Billing
-    if (BILLING_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.Billing, {
-        retryable: false,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    // Rate limit
-    if (RATE_LIMIT_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.RateLimit, {
-        retryable: true,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    // Context overflow
-    if (CONTEXT_OVERFLOW_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ContextOverflow, {
-        retryable: true,
-        shouldCompress: true,
-      });
-    }
-
-    // Auth
-    if (AUTH_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.Auth, {
-        retryable: false,
-        shouldRotateCredential: true,
-        shouldFallback: true,
-      });
-    }
-
-    // Provider policy block
-    if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ProviderPolicyBlocked, {
-        retryable: false,
-        shouldFallback: false,
-      });
-    }
-
-    // Model not found
-    if (MODEL_NOT_FOUND_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.ModelNotFound, {
-        retryable: false,
-        shouldFallback: true,
-      });
-    }
-
-    // Timeout
-    if (TIMEOUT_MESSAGE_PATTERNS.some((p) => msg.includes(p))) {
-      return result(FailoverReason.Timeout, { retryable: true });
-    }
-
-    // Transport error by type
-    if (TRANSPORT_ERROR_TYPES.has(errorType)) {
-      return result(FailoverReason.Timeout, { retryable: true });
-    }
-
-    // Fallback
-    return result(FailoverReason.Unknown, { retryable: true });
-  }
-
-  private recordStats(classified: ClassifiedError): void {
-    const count = this.stats.byReason.get(classified.reason) ?? 0;
-    this.stats.byReason.set(classified.reason, count + 1);
-    this.stats.recentErrors.push(classified);
-    if (this.stats.recentErrors.length > 100) {
-      this.stats.recentErrors.shift();
-    }
-  }
-
-  /** 分類結果を人間可読な文字列に */
-  formatResult(classified: ClassifiedError): string {
-    const icon =
-      classified.reason === FailoverReason.Auth ? "🔑" :
-      classified.reason === FailoverReason.Billing ? "💰" :
-      classified.reason === FailoverReason.RateLimit ? "⏳" :
-      classified.reason === FailoverReason.Timeout ? "⌛" :
-      classified.reason === FailoverReason.ContextOverflow ? "📦" :
-      classified.reason === FailoverReason.ModelNotFound ? "🔍" :
-      classified.reason === FailoverReason.ServerError ? "🔴" :
-      classified.reason === FailoverReason.Overloaded ? "⚠️" :
-      "❓";
-
-    const retryability = classified.retryable ? "🔄 リトライ可" : "⛔ リトライ不可";
-
-    return (
-      `${icon} **${classified.reason}** (${classified.statusCode ?? "?"})` +
-      `\n   ${classified.message.slice(0, 150)}` +
-      `\n   ${retryability}` +
-      (classified.shouldCompress ? " | 📉 圧縮推奨" : "") +
-      (classified.shouldRotateCredential ? " | 🔄 認証情報ローテート" : "") +
-      (classified.shouldFallback ? " | 🔁 フォールバック推奨" : "")
-    );
+      if (statusCode >= 500 && statusCode < 600) {
+        return result("server_error");
+      }
+      return null;
   }
 }
 
-// ==================== シングルトン ====================
-
-export const errorClassifier = new ErrorClassifier();
-
-// ==================== システムコマンド ====================
-
-export function getErrorCommands(): Record<string, (args: string[]) => string> {
-  return {
-    "/errors": (args: string[]) => {
-      const sub = args[0]?.toLowerCase();
-
-      switch (sub) {
-        case "recent":
-        case "log": {
-          const errors = errorClassifier.getRecentErrors(10);
-          if (errors.length === 0) return "📭 直近のエラーはありません";
-          return (
-            `🚨 **直近のエラー (${errors.length}件)**\n\n` +
-            errors.map((e, i) => `${i + 1}. ${errorClassifier.formatResult(e)}`).join("\n\n")
-          );
-        }
-
-        case "stats": {
-          const stats = errorClassifier.getStats();
-          if (stats.totalClassified === 0) return "📭 分類統計はまだありません";
-          return (
-            `📊 **エラー分類統計**\n` +
-            `総分類数: ${stats.totalClassified}\n\n` +
-            [...stats.byReason.entries()]
-              .sort((a, b) => b[1] - a[1])
-              .map(([reason, count]) => `- ${reason}: ${count}回`)
-              .join("\n")
-          );
-        }
-
-        case "reset": {
-          errorClassifier.resetStats();
-          return "🧹 エラー統計をリセットしました";
-        }
-
-        case "test": {
-          const testError = args.slice(1).join(" ");
-          if (!testError) return "⚠️ テストエラーメッセージが必要です";
-          const classified = errorClassifier.classify(testError);
-          return errorClassifier.formatResult(classified);
-        }
-
-        default:
-          return (
-            `🚨 **エラー分類コマンド**\n` +
-            `/errors recent — 直近のエラー\n` +
-            `/errors stats — 分類統計\n` +
-            `/errors reset — 統計リセット\n` +
-            `/errors test <msg> — テスト分類`
-          );
-      }
-    },
-  };
+function classify400(
+  errorMsg: string,
+  result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError,
+): ClassifiedError | null {
+  if (IMAGE_TOO_LARGE_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("image_too_large");
+  }
+  if (CONTEXT_OVERFLOW_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("context_overflow", { shouldCompress: true });
+  }
+  if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("provider_policy_blocked", { retryable: false, shouldFallback: false });
+  }
+  if (MODEL_NOT_FOUND_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("model_not_found", { retryable: false, shouldFallback: true });
+  }
+  if (RATE_LIMIT_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("rate_limit", { shouldRotateCredential: true, shouldFallback: true });
+  }
+  if (BILLING_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("billing", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
+  }
+  return result("format_error", { retryable: false, shouldFallback: true });
 }
 
-export default ErrorClassifier;
+// ==================== メッセージパターン分類 ====================
+
+function classifyByMessage(
+  errorMsg: string,
+  _errorType: string,
+  approxTokens: number,
+  contextLength: number,
+  result: (reason: FailoverReason, overrides?: Partial<ClassifiedError>) => ClassifiedError,
+): ClassifiedError | null {
+  if (PAYLOAD_TOO_LARGE_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("payload_too_large", { shouldCompress: true });
+  }
+  if (IMAGE_TOO_LARGE_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("image_too_large");
+  }
+
+  const hasUsageLimit = USAGE_LIMIT_PATTERNS.some((p) => errorMsg.includes(p));
+  if (hasUsageLimit) {
+    const hasTransient = USAGE_LIMIT_TRANSIENT_SIGNALS.some((p) => errorMsg.includes(p));
+    if (hasTransient) {
+      return result("rate_limit", { shouldRotateCredential: true, shouldFallback: true });
+    }
+    return result("billing", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
+  }
+
+  if (BILLING_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("billing", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
+  }
+  if (RATE_LIMIT_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("rate_limit", { shouldRotateCredential: true, shouldFallback: true });
+  }
+  if (CONTEXT_OVERFLOW_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("context_overflow", { shouldCompress: true });
+  }
+  if (AUTH_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("auth", { retryable: false, shouldRotateCredential: true, shouldFallback: true });
+  }
+  if (PROVIDER_POLICY_BLOCKED_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("provider_policy_blocked", { retryable: false, shouldFallback: false });
+  }
+  if (MODEL_NOT_FOUND_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("model_not_found", { retryable: false, shouldFallback: true });
+  }
+  if (TIMEOUT_MESSAGE_PATTERNS.some((p) => errorMsg.includes(p))) {
+    return result("timeout");
+  }
+
+  return null;
+}
+
+// ==================== ヘルパー ====================
+
+function extractStatusCode(error: Error): number | undefined {
+  const err = error as any;
+  if (typeof err.statusCode === "number") return err.statusCode;
+  if (typeof err.status === "number" && err.status >= 100 && err.status < 600) return err.status;
+  if (err.response && typeof err.response.status === "number") return err.response.status;
+  return undefined;
+}
+
+export function formatClassifiedError(ce: ClassifiedError): string {
+  const icons: Record<FailoverReason, string> = {
+    auth: "🔑", auth_permanent: "🔒", billing: "💰", rate_limit: "⏱️",
+    overloaded: "🔥", server_error: "💥", timeout: "⏰",
+    context_overflow: "📏", payload_too_large: "📦", image_too_large: "🖼️",
+    model_not_found: "🔍", provider_policy_blocked: "🚫",
+    format_error: "❓", thinking_signature: "🧠",
+    long_context_tier: "📈", oauth_long_context_beta_forbidden: "🔐",
+    llama_cpp_grammar_pattern: "📝", unknown: "❔",
+  };
+
+  return [
+    `${icons[ce.reason]} **API Error**`,
+    `  理由: ${ce.reason}`,
+    ce.statusCode ? `  ステータス: ${ce.statusCode}` : "",
+    ce.provider ? `  プロバイダ: ${ce.provider}` : "",
+    ce.model ? `  モデル: ${ce.model}` : "",
+    `  メッセージ: ${ce.message.slice(0, 200)}`,
+    `  リカバリー: ${ce.retryable ? "🔄 リトライ可" : "⛔ リトライ不可"}${ce.shouldCompress ? " 📦 圧縮必要" : ""}${ce.shouldRotateCredential ? " 🔄 認証情報ローテート" : ""}${ce.shouldFallback ? " ⬇️ フォールバック" : ""}`,
+  ].filter(Boolean).join("\n");
+}

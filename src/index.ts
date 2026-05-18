@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.32: UTILITIES - net-utils + text-utils + retry-utils + SSRF + logger強化
-// 3リポジトリからの全ユーティリティパターン抽出完了。全165+3=168ファイル
+// v1.33: DEEP CUTS - tokenjuice + error-classifier + fuzzy-match + cost-tracker強化 + llm-semaphore
+// OpenHuman/OpenClaw/Hermes Agentの最終未抽出パターンを完全網羅
 // ==========================================
 
 import "dotenv/config";
@@ -1016,8 +1016,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.32 起動中…");
-  logger.info(" UTILITIES: net-utils / text-utils / retry-utils");
+  logger.info(" Aikata v1.33 起動中…");
+  logger.info(" DEEP CUTS: tokenjuice / error-classifier / fuzzy-match / cost-tracker");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 

@@ -1,6 +1,6 @@
 // ==========================================
-// Aikata - コストトラッキング（OpenHuman cost/routing由来）
-// トークン消費量 + 推定金額をリアルタイム追跡
+// Aikata - コストトラッキング（OpenHuman cost/tracker完全移植版）
+// JSONL永続化 + 予算執行 + モデル別集計 + 日次/月次集計キャッシュ
 // ==========================================
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -356,4 +356,116 @@ function round(n: number): number {
 const initial = loadSummary();
 if (initial.totalCalls > 0) {
   logger.info(`[CostTracker] 復元: ${initial.totalCalls}回, $${initial.totalCost.toFixed(4)} 累計`);
+}
+
+// ==================== JSONL永続化（OpenHuman cost/tracker完全移植） ====================
+
+function jsonlPath(): string {
+  return resolve(process.env.DATA_DIR || "./data", "costs.jsonl");
+}
+
+/** コストレコードをJSONLに追記 */
+export function appendCostRecord(record: CostRecord): void {
+  const path = jsonlPath();
+  mkdirSync(dirname(path), { recursive: true });
+  const fs = require("fs");
+  fs.appendFileSync(path, JSON.stringify(record) + "\n", "utf-8");
+}
+
+/** JSONLを全スキャンして集計 */
+export function rebuildFromJsonl(): CostSummary {
+  const path = jsonlPath();
+  if (!existsSync(path)) return emptySummary();
+
+  const now = Date.now();
+  const today = new Date().toISOString().slice(0, 10);
+  const month = new Date().toISOString().slice(0, 7);
+
+  let totalCost = 0;
+  let totalTokens = 0;
+  let totalCalls = 0;
+  let dailyCost = 0;
+  let monthlyCost = 0;
+  const byModel: Record<string, { cost: number; tokens: number; calls: number }> = {};
+
+  const fs = require("fs");
+  const lines = fs.readFileSync(path, "utf-8").split("\n").filter(Boolean);
+  for (const line of lines) {
+    try {
+      const record: CostRecord = JSON.parse(line);
+      totalCost += record.cost;
+      totalTokens += record.tokens;
+      totalCalls++;
+
+      if (record.timestamp.startsWith(today)) dailyCost += record.cost;
+      if (record.timestamp.startsWith(month)) monthlyCost += record.cost;
+
+      if (!byModel[record.model]) byModel[record.model] = { cost: 0, tokens: 0, calls: 0 };
+      byModel[record.model]!.cost += record.cost;
+      byModel[record.model]!.tokens += record.tokens;
+      byModel[record.model]!.calls += 1;
+    } catch { continue; }
+  }
+
+  return { totalCost: round(totalCost), totalTokens, totalCalls, dailyCost, monthlyCost, byModel };
+}
+
+// ==================== 予算執行（BudgetCheck） ====================
+
+export interface BudgetConfig {
+  dailyLimitUsd?: number;
+  monthlyLimitUsd?: number;
+}
+
+export type BudgetResult = "allowed" | "warning" | "exceeded";
+
+let budgetConfig: BudgetConfig = {};
+
+/** 予算設定 */
+export function setBudget(config: BudgetConfig): void {
+  budgetConfig = config;
+  logger.info(`[Budget] 設定: daily=${config.dailyLimitUsd ?? "無制限"}, monthly=${config.monthlyLimitUsd ?? "無制限"}`);
+}
+
+/** 予算チェック（推定コストを含めて判定） */
+export function checkBudget(estimatedCostUsd: number): BudgetResult {
+  const summary = loadSummary();
+  const projectedDaily = summary.dailyCost + estimatedCostUsd;
+  const projectedMonthly = summary.monthlyCost + estimatedCostUsd;
+
+  if (budgetConfig.dailyLimitUsd && projectedDaily > budgetConfig.dailyLimitUsd) {
+    return "exceeded";
+  }
+  if (budgetConfig.monthlyLimitUsd && projectedMonthly > budgetConfig.monthlyLimitUsd) {
+    return "exceeded";
+  }
+
+  // 警告閾値（80%）
+  if (budgetConfig.dailyLimitUsd && projectedDaily > budgetConfig.dailyLimitUsd * 0.8) {
+    return "warning";
+  }
+  if (budgetConfig.monthlyLimitUsd && projectedMonthly > budgetConfig.monthlyLimitUsd * 0.8) {
+    return "warning";
+  }
+
+  return "allowed";
+}
+
+export function formatBudgetStatus(): string {
+  const summary = loadSummary();
+  const lines: string[] = ["💰 **予算状態**"];
+
+  if (budgetConfig.dailyLimitUsd) {
+    const pct = (summary.dailyCost / budgetConfig.dailyLimitUsd) * 100;
+    lines.push(`  日次: $${summary.dailyCost.toFixed(4)} / $${budgetConfig.dailyLimitUsd} (${pct.toFixed(1)}%)`);
+  }
+  if (budgetConfig.monthlyLimitUsd) {
+    const pct = (summary.monthlyCost / budgetConfig.monthlyLimitUsd) * 100;
+    lines.push(`  月次: $${summary.monthlyCost.toFixed(4)} / $${budgetConfig.monthlyLimitUsd} (${pct.toFixed(1)}%)`);
+  }
+  if (!budgetConfig.dailyLimitUsd && !budgetConfig.monthlyLimitUsd) {
+    lines.push("  予算制限なし");
+  }
+
+  return lines.join("\n");
 }
