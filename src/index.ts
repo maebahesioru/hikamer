@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.23: Orchestrator + ScreenIntelligence + Providers + LocalInference + Meet
+// v1.24: SocketManager + AudioToolkit + TreeSummarizer + TextInput + ToolTimeout
 // ==========================================
 
 import "dotenv/config";
@@ -712,6 +712,28 @@ registerCommand("meet", async (args) => {
   return meetManager.formatStatus();
 });
 
+// ==================== v1.24: 第23弾コマンド ====================
+
+registerCommand("sockets", async () => {
+  const { socketManager } = await import("./socket");
+  return socketManager.formatStatus();
+});
+
+registerCommand("audio", async () => {
+  const { audioToolkit } = await import("./audio-toolkit");
+  return audioToolkit.formatStatus();
+});
+
+registerCommand("summarize", async () => {
+  const { treeSummarizer } = await import("./tree-summarizer");
+  return "🌳 **ツリー要約**\n/summarize <text> — テキストを階層的要約";
+});
+
+registerCommand("timeout", async () => {
+  const { toolTimeoutManager } = await import("./tool-timeout");
+  return toolTimeoutManager.formatStats();
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -776,8 +798,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.23 起動中…");
-  logger.info(" Orchestrator / ScreenIntelligence / Providers / LocalInference / Meet");
+  logger.info(" Aikata v1.24 起動中…");
+  logger.info(" Socket / AudioToolkit / TreeSummarizer / TextInput / ToolTimeout");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -869,7 +891,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /orchestrate /screen /providers /local /meet");
+  logger.info(" /sockets /audio /summarize /timeout /text");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
