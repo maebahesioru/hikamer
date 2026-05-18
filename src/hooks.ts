@@ -280,9 +280,11 @@ class MemoryObserveHook implements AgentHook {
   async execute(context: TurnContext): Promise<void> {
     try {
       const { observeMemory } = await import("./memory-bridge");
+      const { safeObservation } = await import("./privacy-filter");
 
-      // ツール呼び出しを1つずつ観察
+      // ツール呼び出しを1つずつ観察（プライバシーフィルター通過）
       for (const call of context.toolCalls) {
+        const safeResult = safeObservation(call.result.slice(0, 500));
         const summary = `[Tool] ${call.toolName}(${call.success ? "success" : "failed"}) ${call.durationMs}ms`;
         await observeMemory(summary, {
           importance: call.success ? 0.2 : 0.5,

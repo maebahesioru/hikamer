@@ -171,11 +171,227 @@ class FallbackTTS extends TTSBackend {
   }
 }
 
+// ==================== Edge TTS（無料・ブラウザ音声API由来） ====================
+
+class EdgeTTS extends TTSBackend {
+  readonly id = "edge";
+  readonly name = "Edge TTS";
+
+  private static readonly VOICES_URL = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+
+  private voices: Array<{ shortName: string; locale: string }> = [];
+  private ssmlTemplate = (text: string, voice: string, rate: string) =>
+    `<speak version='1.0' xml:lang='ja-JP'><voice name='${voice}'><prosody rate='${rate}' pitch='default'>${this.escapeXml(text)}</prosody></voice></speak>`;
+
+  supportsStreaming(): boolean { return false; }
+
+  getSupportedLanguages(): string[] {
+    return ["ja", "en", "zh", "ko", "fr", "de", "es", "it", "pt", "ru"];
+  }
+
+  async isAvailable(): Promise<boolean> {
+    try {
+      const resp = await fetch("https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4", {
+        signal: AbortSignal.timeout(5000),
+      });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  getAvailabilityMessage(): string {
+    return "Edge TTS: インターネット経由（無料、要ネット接続）";
+  }
+
+  async generate(text: string, options?: TTSOptions): Promise<TTSResult> {
+    const voice = options?.voice || this.selectVoice(options?.language || "ja");
+    const rate = options?.speed ? `+${Math.round((options.speed - 1) * 50)}%` : "+0%";
+    const ssml = this.ssmlTemplate(text, voice, rate);
+
+    const resp = await fetch("https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      body: ssml,
+    });
+
+    if (!resp.ok) {
+      throw new Error(`Edge TTS失敗: HTTP ${resp.status}`);
+    }
+
+    const audioBuffer = await resp.arrayBuffer();
+    const base64 = Buffer.from(audioBuffer).toString("base64");
+
+    return {
+      audio: base64,
+      format: "mp3",
+      durationSec: Math.ceil(text.length / 10), // 概算
+      modelUsed: `edge-tts:${voice}`,
+    };
+  }
+
+  private selectVoice(language: string): string {
+    const voiceMap: Record<string, string> = {
+      ja: "ja-JP-NanamiNeural",
+      en: "en-US-JennyNeural",
+      zh: "zh-CN-XiaoxiaoNeural",
+      ko: "ko-KR-SunHiNeural",
+      fr: "fr-FR-DeniseNeural",
+      de: "de-DE-KatjaNeural",
+      es: "es-ES-ElviraNeural",
+    };
+    return voiceMap[language] || "ja-JP-NanamiNeural";
+  }
+
+  private escapeXml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+}
+
+// ==================== OpenAI TTS ====================
+
+class OpenAITTS extends TTSBackend {
+  readonly id = "openai";
+  readonly name = "OpenAI TTS";
+
+  supportsStreaming(): boolean { return false; }
+
+  getSupportedLanguages(): string[] {
+    return ["ja", "en", "zh", "ko", "fr", "de", "es", "it", "pt"];
+  }
+
+  isAvailable(): boolean {
+    return !!process.env.OPENAI_API_KEY;
+  }
+
+  getAvailabilityMessage(): string {
+    return "OpenAI TTS: $0.015/1K文字（tts-1モデル）";
+  }
+
+  async generate(text: string, options?: TTSOptions): Promise<TTSResult> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY が設定されていません");
+
+    const voice = options?.voice || (options?.language === "ja" ? "nova" : "alloy");
+    const model = "tts-1";
+    const speed = Math.max(0.25, Math.min(4.0, options?.speed ?? 1.0));
+
+    const resp = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        input: text,
+        voice,
+        speed,
+        response_format: "mp3",
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`OpenAI TTS失敗: HTTP ${resp.status}: ${errText}`);
+    }
+
+    const audioBuffer = await resp.arrayBuffer();
+    const base64 = Buffer.from(audioBuffer).toString("base64");
+
+    return {
+      audio: base64,
+      format: "mp3",
+      durationSec: Math.ceil(text.length / 10),
+      modelUsed: `${model}:${voice}`,
+    };
+  }
+}
+
+// ==================== ローカルTTS（espeak/say） ====================
+
+class LocalTTS extends TTSBackend {
+  readonly id = "local";
+  readonly name = "Local TTS";
+
+  private useCommand: string | null = null;
+
+  async isAvailable(): Promise<boolean> {
+    if (this.useCommand) return true;
+    // espeak をチェック
+    try {
+      const { execSync } = await import("child_process");
+      execSync("which espeak 2>/dev/null || which say 2>/dev/null", { timeout: 3000 });
+      this.useCommand = "espeak";
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  getAvailabilityMessage(): string {
+    return "ローカルTTS: espeak (Linux/WSL) または say (macOS)。完全オフライン・無料";
+  }
+
+  async generate(text: string, options?: TTSOptions): Promise<TTSResult> {
+    const { execSync } = await import("child_process");
+    const { writeFileSync, unlinkSync } = await import("fs");
+    const { resolve } = await import("path");
+    const os = process.platform;
+
+    const tmpFile = resolve("/tmp", `aikata-tts-${Date.now()}.wav`);
+    const speed = options?.speed ?? 1.0;
+
+    try {
+      if (os === "darwin") {
+        // macOS say
+        execSync(`say -o "${tmpFile}" --data-format=LEI16@22050 "${text.replace(/"/g, '\\"')}"`, { timeout: 30000 });
+      } else {
+        // Linux/WSL: espeak
+        const lang = options?.language === "ja" ? "ja" : "en";
+        const wordsPerMin = Math.round(175 * speed);
+        execSync(`espeak -v${lang} -s${wordsPerMin} -w "${tmpFile}" "${text.replace(/"/g, '\\"')}"`, { timeout: 30000 });
+      }
+
+      const { readFileSync } = await import("fs");
+      const audioBuffer = readFileSync(tmpFile);
+      const base64 = audioBuffer.toString("base64");
+
+      try { unlinkSync(tmpFile); } catch {}
+
+      return {
+        audio: base64,
+        format: "wav",
+        durationSec: Math.ceil(text.length / 8 / speed),
+        modelUsed: `local:${this.useCommand || os}`,
+      };
+    } catch (e: any) {
+      try { unlinkSync(tmpFile); } catch {}
+      throw new Error(`ローカルTTS失敗: ${e.message}`);
+    }
+  }
+}
+
 // ==================== シングルトン ====================
 
 export const ttsRegistry = new TTSRegistry();
 
-// デフォルトでFallbackを登録
+// デフォルトで全バックエンドを登録
 ttsRegistry.register(new FallbackTTS());
+ttsRegistry.register(new EdgeTTS());
+ttsRegistry.register(new OpenAITTS());
+ttsRegistry.register(new LocalTTS());
+
+// Edge TTSをデフォルトに設定
+ttsRegistry.setActive("edge");
 
 export { TTSRegistry };
