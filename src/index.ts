@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.27: COMPLETE - Curator + CredentialPool + AccountUsage + LSP + SkillSystem
-// 3リポジトリからの全抽出完了。全137+5=142ファイル
+// v1.29: NEW - Commitments + Crestodian + Heartbeat + REM Memory + ThinkScrubber
+// 3リポジトリからの全抽出完了。全150+5=155ファイル
 // ==========================================
 
 import "dotenv/config";
@@ -860,6 +860,53 @@ registerCommand("ws", async () => {
   return `🔌 **WebSocket**\nポート: ${wsServer["port"] ?? "未起動"}`;
 });
 
+// ==================== v1.29: NEW - Commitments + Crestodian + Heartbeat + REM + ThinkScrubber ====================
+
+registerCommand("commits", async () => {
+  const { listAllCommitments, formatCommitments } = await import("./commitments");
+  const all = listAllCommitments({ status: "pending" });
+  return formatCommitments(all);
+});
+
+registerCommand("crestodian", async (args) => {
+  const { parseOperation, executeOperation, formatOverview, collectOverview } = await import("./crestodian");
+  if (!args || args.trim() === "") {
+    const overview = await collectOverview();
+    return formatOverview(overview);
+  }
+  const op = parseOperation(args);
+  const result = await executeOperation(op);
+  return result.message;
+});
+
+registerCommand("heartbeat", async (args) => {
+  const { getHeartbeatState, formatHeartbeatStatus, startHeartbeat, stopHeartbeat, tickNow } = await import("./heartbeat");
+  const cmd = (args || "").trim().toLowerCase();
+  if (cmd === "start") { startHeartbeat(); return "💓 Heartbeat started"; }
+  if (cmd === "stop") { stopHeartbeat(); return "💓 Heartbeat stopped"; }
+  if (cmd === "tick") { const s = await tickNow(); return `💓 Tick done: ${s.eventsDelivered}/${s.eventsProcessed} events`; }
+  return formatHeartbeatStatus();
+});
+
+registerCommand("memory", async (args) => {
+  const { formatMemoryStats, searchMemory, formatMemoryRecord, getMemoryStats } = await import("./rem-memory");
+  const cmd = (args || "").trim().toLowerCase();
+  if (cmd === "stats" || cmd === "") return formatMemoryStats();
+  if (cmd.startsWith("search ")) {
+    const query = cmd.slice(7);
+    const results = searchMemory(query, { limit: 5 });
+    if (results.length === 0) return "🔍 該当する記憶が見つかりませんでした。";
+    return ["🔍 **検索結果**", "", ...results.map(r => formatMemoryRecord(r))].join("\n");
+  }
+  return formatMemoryStats();
+});
+
+registerCommand("scrub", async (args) => {
+  const { stripThinkBlocks, StreamingThinkScrubber } = await import("./think-scrubber");
+  if (!args) return "🧹 **Think Scrubber**\\nストリーミング思考タグ除去エンジン";
+  return `🧹 スクラブ結果:\\n${stripThinkBlocks(args)}`;
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -924,8 +971,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.26 起動中…");
-  logger.info(" FINAL: Insights / Trajectory / WebView / Surfaces / Misc");
+  logger.info(" Aikata v1.29 起動中…");
+  logger.info(" NEW: Commitments / Crestodian / Heartbeat / REM Memory / ThinkScrubber");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
