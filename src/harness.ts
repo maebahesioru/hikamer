@@ -157,7 +157,7 @@ class SessionHarness {
 
     this.sessions.set(id, session);
     this.stats.created++;
-    eventBus.emit(createEvent("harness:session_created", { sessionId: id, threadId: config.threadId }));
+    eventBus.publish(createEvent("harness:session_created", { sessionId: id, threadId: config.threadId }));
     return session;
   }
 
@@ -199,7 +199,7 @@ class SessionHarness {
     if (session.status === "completed") this.stats.completed++;
     else if (session.status === "archived") this.stats.completed++;
 
-    eventBus.emit(createEvent("harness:session_closed", { sessionId: id, status: session.status }));
+    eventBus.publish(createEvent("harness:session_closed", { sessionId: id, status: session.status }));
     return true;
   }
 
@@ -324,7 +324,7 @@ class SessionHarness {
       this.stats.failed++;
     }
 
-    eventBus.emit(createEvent("harness:turn_completed", {
+    eventBus.publish(createEvent("harness:turn_completed", {
       sessionId,
       turnIndex,
       status: turn.status,

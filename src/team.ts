@@ -141,7 +141,7 @@ class TeamManager {
     };
 
     this.teams.set(id, team);
-    eventBus.emit(createEvent("team:created", { teamId: id, name: team.name }));
+    eventBus.publish(createEvent("team:created", { teamId: id, name: team.name }));
     logger.info(`[Team] created: ${team.name} (${agents.length} agents)`);
     return team;
   }
@@ -162,7 +162,7 @@ class TeamManager {
     const team = this.teams.get(id);
     if (!team) return false;
     this.teams.delete(id);
-    eventBus.emit(createEvent("team:deleted", { teamId: id }));
+    eventBus.publish(createEvent("team:deleted", { teamId: id }));
     logger.info(`[Team] removed: ${team.name}`);
     return true;
   }

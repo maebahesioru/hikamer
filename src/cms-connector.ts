@@ -200,7 +200,7 @@ export class CmsConnector {
             excerpt: fields.description || "",
             metaTitle: seoFields.title || fields.metaTitle || "",
             metaDescription: seoFields.description || fields.metaDescription || "",
-            ogImage: assets.get(seoFields.ogImage?.sys?.id) || "",
+            ogImage: (assets.get(seoFields.ogImage?.sys?.id) ?? "") as string,
             publishedAt: item.sys?.createdAt || "",
             updatedAt: item.sys?.updatedAt || "",
             status: item.sys?.publishedAt ? "published" : "draft",

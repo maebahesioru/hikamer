@@ -91,7 +91,7 @@ class ReflectionEngine {
 
     // 高重要度リフレクションはブロードキャスト
     if (reflection.confidence > 0.8 || reflection.category === "anomaly") {
-      eventBus.emit(createEvent("reflection:important", {
+      eventBus.publish(createEvent("reflection:important", {
         id: reflection.id,
         category: reflection.category,
         summary: reflection.summary,

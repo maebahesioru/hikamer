@@ -128,7 +128,7 @@ class Orchestrator {
     this.plans.push(plan);
     if (this.plans.length > 50) this.plans.shift();
 
-    eventBus.emit(createEvent("orchestrator:plan_created", {
+    eventBus.publish(createEvent("orchestrator:plan_created", {
       planId: id,
       goal: goal.slice(0, 100),
       steps: steps.length,
@@ -161,7 +161,7 @@ class Orchestrator {
         step.status = "completed";
         step.durationMs = Date.now() - start;
 
-        eventBus.emit(createEvent("orchestrator:step_completed", {
+        eventBus.publish(createEvent("orchestrator:step_completed", {
           planId,
           stepId: step.id,
           agent: step.agent,

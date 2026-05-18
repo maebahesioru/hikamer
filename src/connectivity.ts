@@ -301,7 +301,7 @@ class ConnectivityManager {
       `[Connectivity] ${type}: ${detail}`
     );
 
-    eventBus.emit(
+    eventBus.publish(
       createEvent("connectivity:incident", {
         type,
         detail,

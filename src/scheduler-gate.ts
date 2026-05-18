@@ -148,7 +148,7 @@ class SchedulerGate {
       }
       const granted = this.grantPermit(next.source, next.priority);
       if (granted.status === "granted") {
-        eventBus.emit(createEvent("gate:queue_processed", {
+        eventBus.publish(createEvent("gate:queue_processed", {
           permitId: granted.id,
           source: next.source,
           waitMs: Date.now() - this.getPermitTime(next),

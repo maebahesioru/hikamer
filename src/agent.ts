@@ -38,6 +38,7 @@ export async function agentLoop(
   const toolLogs: ToolLogEntry[] = [];
   let iterations = 0;
   let allReasoning = "";
+  let partialContent = "";
   const { streaming = true, onChunk, onToolStart, onToolEnd, signal } = options;
 
   // 会話IDからプラットフォームを推測
@@ -95,7 +96,6 @@ export async function agentLoop(
       const useStream = streaming && !!provider.chatStream;
       
       let response: { content: string | null; tool_calls: any[] | null; finishReason: string; reasoning_content?: string };
-      let partialContent = "";
 
       if (useStream) {
         // ストリーミングモード — ツール呼び出しはチャンク間で蓄積マージが必要

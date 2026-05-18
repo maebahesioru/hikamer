@@ -135,7 +135,7 @@ class TriageEngine {
     decision: TriageDecision,
     envelope: TriggerEnvelope
   ): Promise<void> {
-    eventBus.emit(
+    eventBus.publish(
       createEvent("triage:decision", {
         envelopeId: envelope.id,
         decisionType: decision.type,

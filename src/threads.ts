@@ -225,7 +225,7 @@ class ThreadManager {
       JSON.stringify(labels ?? [])
     );
 
-    eventBus.emit(createEvent("thread:created", { threadId: id, title, chatId }));
+    eventBus.publish(createEvent("thread:created", { threadId: id, title, chatId }));
     logger.debug(`[Threads] created thread ${id}: ${title}`);
     return this.getThread(id)!;
   }
@@ -274,7 +274,7 @@ class ThreadManager {
     db.run("DELETE FROM thread_messages WHERE thread_id = ?", threadId);
     db.run("DELETE FROM threads WHERE id = ?", threadId);
 
-    eventBus.emit(
+    eventBus.publish(
       createEvent("thread:deleted", { threadId, chatId: thread.chatId })
     );
     logger.info(`[Threads] deleted thread ${threadId}`);
@@ -340,7 +340,7 @@ class ThreadManager {
       this.trimOldMessages(threadId, MAX_MESSAGES_PER_THREAD);
     }
 
-    eventBus.emit(
+    eventBus.publish(
       createEvent("thread:message", {
         threadId,
         messageId: id,

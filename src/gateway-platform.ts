@@ -158,7 +158,7 @@ class Gateway {
       const result = await adapter.send(transformed);
       if (result) {
         this.stats.messagesSent++;
-        eventBus.emit(createEvent("gateway:sent", {
+        eventBus.publish(createEvent("gateway:sent", {
           platform: message.platform,
           channelId: message.channelId,
           messageId: message.id,
@@ -178,7 +178,7 @@ class Gateway {
   async receiveMessage(message: PlatformMessage): Promise<void> {
     this.stats.messagesReceived++;
 
-    eventBus.emit(createEvent("gateway:received", {
+    eventBus.publish(createEvent("gateway:received", {
       platform: message.platform,
       channelId: message.channelId,
       messageId: message.id,
@@ -276,7 +276,7 @@ class Gateway {
       if (!rule.targetPlatforms.includes(message.platform)) continue;
       if (rule.matcher(message)) {
         this.stats.routingMatches++;
-        eventBus.emit(createEvent("gateway:routed", {
+        eventBus.publish(createEvent("gateway:routed", {
           messageId: message.id,
           ruleName: rule.name,
           fromPlatform: message.platform,

@@ -93,7 +93,7 @@ class SecurityAudit {
 
     // 高重要度イベントはブロードキャスト
     if (auditEvent.severity === "high" || auditEvent.severity === "critical") {
-      eventBus.emit(createEvent("security:alert", {
+      eventBus.publish(createEvent("security:alert", {
         id: auditEvent.id,
         category: auditEvent.category,
         severity: auditEvent.severity,

@@ -104,7 +104,7 @@ class BackgroundReviewer {
 
     // 安全フラグが立ったら通知
     if (safetyFlag) {
-      eventBus.emit(createEvent("review:safety_flag", {
+      eventBus.publish(createEvent("review:safety_flag", {
         sessionId: context.sessionId,
         reviewId: result.id,
         score,

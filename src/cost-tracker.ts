@@ -130,7 +130,34 @@ interface CostSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalReasoningTokens: number;
+  totalTokens: number;
+  dailyCost: number;
+  monthlyCost: number;
   dailyCosts: Record<string, number>;
+  byModel: Record<string, { cost: number; tokens: number; calls: number }>;
+}
+
+interface CostRecord {
+  timestamp: string;
+  model: string;
+  cost: number;
+  tokens: number;
+}
+
+function emptySummary(): CostSummary {
+  return {
+    sessions: {},
+    totalCalls: 0,
+    totalCost: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalReasoningTokens: 0,
+    totalTokens: 0,
+    dailyCost: 0,
+    monthlyCost: 0,
+    dailyCosts: {},
+    byModel: {},
+  };
 }
 
 const COST_DB_PATH = resolve(process.env.DATA_DIR || "./data", "costs.json");
@@ -154,7 +181,11 @@ function loadSummary(): CostSummary {
     totalInputTokens: 0,
     totalOutputTokens: 0,
     totalReasoningTokens: 0,
+    totalTokens: 0,
+    dailyCost: 0,
+    monthlyCost: 0,
     dailyCosts: {},
+    byModel: {},
   };
   return _summary;
 }

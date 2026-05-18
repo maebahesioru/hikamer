@@ -50,12 +50,14 @@ class WebhookRouter {
   /** トンネル登録 */
   register(path: string, kind: TunnelTargetKind, owner?: { skillId?: string; agentId?: string }): TunnelRegistration {
     // 既存のトンネルがあれば上書き
-    const existing = this.findByPath(path);
-    if (existing) {
-      if (owner?.skillId && existing.skillId && existing.skillId !== owner.skillId) {
-        throw new Error(`Path "${path}" is already owned by skill "${existing.skillId}"`);
+    for (const [, t] of this.tunnels) {
+      if (t.path === path) {
+        if (owner?.skillId && t.skillId && t.skillId !== owner.skillId) {
+          throw new Error(`Path "${path}" is already owned by skill "${t.skillId}"`);
+        }
+        this.unregister(t.id);
+        break;
       }
-      this.unregister(existing.id);
     }
 
     this.generation++;

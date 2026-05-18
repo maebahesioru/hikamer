@@ -21,6 +21,18 @@ export type EventDomain =
   | "subagent"    // サブエージェント
   | "stream"      // ストリーミング
   | "provider"    // LLMプロバイダー
+  | "review"      // バックグラウンドレビュー
+  | "connectivity" // ネットワーク接続
+  | "context"     // コンテキストエンジン
+  | "harness"     // セッションハーネス
+  | "orchestrator" // マルチエージェントオーケストレーター
+  | "reflection"  // 振り返り
+  | "gate"        // スケジューラーゲート
+  | "team"        // チーム管理
+  | "thread"      // スレッド管理
+  | "triage"      // イベントトリアージ
+  | "security"    // セキュリティ
+  | "gateway"     // ゲートウェイプラットフォーム
   | "error";      // エラー
 
 /** 基底イベント */
@@ -142,6 +154,11 @@ class EventBus {
   /** 購読者数を取得 */
   get subscriberCount(): number {
     return this.handlers.length;
+  }
+
+  /** emitエイリアス（publishの互換性） */
+  emit(domain: EventDomain, name: string, data?: Record<string, unknown>): void {
+    this.publish(createEvent(domain, name, data));
   }
 }
 
