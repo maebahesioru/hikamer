@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.35: DEEPER - llm-function + config-layers + worker-pool + artifact-store + mece-classifier
-// toprank/ViMax/roborevの未抽出パターンをさらに5つ
+// v1.36: EXHAUSTIVE - cms-connector + dag-executor + ci-poller + git-utils + content-calendar
+// toprank/ViMax/roborevの全残りパターンを抽出（最終バッチ）
 // ==========================================
 
 import "dotenv/config";
