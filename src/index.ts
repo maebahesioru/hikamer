@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.10: FileWatcher + MCPServer + Subconscious + MemoryTree + ApprovalWorkflow
+// v1.18: Threads + Hooks + Doctor + Connectivity + SituationReport
 // ==========================================
 
 import "dotenv/config";
@@ -457,6 +457,38 @@ registerCommand("reset", async (_args, _userId) => {
   return "✅ コスト警告をリセットしました。";
 });
 
+// ==================== v1.18: 新モジュールコマンド ====================
+
+registerCommand("threads", async (args) => {
+  const { threadManager, getThreadsCommands } = await import("./threads");
+  const cmds = getThreadsCommands();
+  return cmds["/threads"] ? cmds["/threads"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("hooks", async (args) => {
+  const { hookManager, getHooksCommands } = await import("./hooks");
+  const cmds = getHooksCommands();
+  return cmds["/hooks"] ? cmds["/hooks"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("doctor", async (args) => {
+  const { getDoctorCommands } = await import("./doctor");
+  const cmds = getDoctorCommands();
+  return cmds["/doctor"] ? await cmds["/doctor"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("connectivity", async (args) => {
+  const { connectivityManager, getConnectivityCommands } = await import("./connectivity");
+  const cmds = getConnectivityCommands();
+  return cmds["/connectivity"] ? await cmds["/connectivity"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
+registerCommand("situation", async (args) => {
+  const { situationReport, getSituationCommands } = await import("./situation-report");
+  const cmds = getSituationCommands();
+  return cmds["/situation"] ? await cmds["/situation"](args ? args.split(" ") : []) : "❌ コマンドエラー";
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -521,8 +553,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.16 起動中…");
-  logger.info(" URLManager / Autocomplete / People / Referral / SchedulerV2 / LocalAI / Bugfixes");
+  logger.info(" Aikata v1.18 起動中…");
+  logger.info(" Threads / Hooks / Doctor / Connectivity / SituationReport");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -590,6 +622,32 @@ async function main() {
   if (process.env.MCP_TRANSPORT) {
     startMcpServer();
   }
+
+  // v1.18: 新モジュール初期化
+  try {
+    const { threadManager: tm } = await import("./threads");
+    tm.init();
+    logger.info("[Threads] スレッド管理初期化完了");
+
+    const { hookManager: hm } = await import("./hooks");
+    hm.init();
+    logger.info("[Hooks] エージェントフック初期化完了");
+
+    const { connectivityManager: cm } = await import("./connectivity");
+    cm.init();
+    logger.info("[Connectivity] 接続監視開始");
+
+    // 中断ターンをマーク
+    const interrupted = tm.markInterruptedTurns();
+    if (interrupted > 0) {
+      logger.warn(`[Threads] ${interrupted}個のターンを中断としてマーク（前回のクラッシュの可能性）`);
+    }
+  } catch (err) {
+    logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
+  }
+
+  logger.info(" /threads /hooks /doctor /connectivity /situation");
+  logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
   if (process.env.ENABLE_SUBCONSCIOUS === "true") {
