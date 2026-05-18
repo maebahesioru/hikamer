@@ -333,3 +333,85 @@ export function formatSubagentDetail(id: string): string {
     `  子孫数: ${r.descendantCount}`,
   ].filter(Boolean).join("\n");
 }
+
+// ==========================================
+// Agent Identity System（openpencil 3k stars パターン）
+// サブエージェントに色+名前を割り当てて視覚的追跡を可能に
+// ==========================================
+
+/** エージェント識別子 */
+export interface AgentIdentity {
+  color: string;
+  name: string;
+  emoji: string;
+}
+
+const AGENT_COLORS = [
+  "#FF6B6B", // coral red
+  "#4ECDC4", // teal
+  "#FFD93D", // golden yellow
+  "#6C5CE7", // purple
+  "#A8E6CF", // mint green
+  "#FF8A5C", // warm orange
+];
+
+const AGENT_NAMES = [
+  "Kiki", "Mochi", "Pixel", "Nova", "Zuri", "Cleo",
+  "Boba", "Rune", "Fern", "Echo", "Puck", "Sage",
+];
+
+const AGENT_EMOJIS = ["🤖", "🦊", "🐱", "🐙", "🦉", "🐉", "🦋", "🐺", "🦊", "🐰"];
+
+/**
+ * 指定数分のユニークなエージェント識別子を割り当て。
+ * 色は循環、名前と絵文字はシャッフル。
+ */
+export function assignAgentIdentities(count: number): AgentIdentity[] {
+  const shuffledNames = [...AGENT_NAMES].sort(() => Math.random() - 0.5);
+  const shuffledEmojis = [...AGENT_EMOJIS].sort(() => Math.random() - 0.5);
+
+  return Array.from({ length: count }, (_, i) => ({
+    color: AGENT_COLORS[i % AGENT_COLORS.length]!,
+    name: shuffledNames[i % shuffledNames.length]!,
+    emoji: shuffledEmojis[i % shuffledEmojis.length]!,
+  }));
+}
+
+// ==========================================
+// サブエージェント再試行 + コンテンツブロック検出（openpencil パターン）
+// ==========================================
+
+/** 再試行不可能なエラーパターン（コンテンツモデレーション拒否等） */
+const NON_RETRYABLE_PATTERNS = [
+  /HTTP 4(?:0[01]|29|51)/i,      // 400/401/429/451
+  /content blocked/i,
+  /authentication failed/i,
+  /censorship/i,
+  /rate limit/i,
+  /quota exceeded/i,
+  /invalid request/i,
+];
+
+/**
+ * エラーメッセージが再試行不可能か判定。
+ * openpencilの isNonRetryable パターン。
+ */
+export function isNonRetryableError(errorMessage: string): boolean {
+  return NON_RETRYABLE_PATTERNS.some(p => p.test(errorMessage));
+}
+
+/**
+ * サブエージェントの結果が失敗で再試行すべきか判定。
+ * 再試行条件: エラーあり AND ノードなし AND 中断されてない AND 再試行不可能なエラーでない
+ */
+export function shouldRetrySubAgent(
+  error: string | null,
+  resultCount: number,
+  aborted: boolean,
+): boolean {
+  if (!error) return false;
+  if (resultCount > 0) return false; // 部分的な結果があるなら再試行しない
+  if (aborted) return false;
+  if (isNonRetryableError(error)) return false;
+  return true;
+}
