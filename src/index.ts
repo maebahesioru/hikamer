@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.33: DEEP CUTS - tokenjuice + error-classifier + fuzzy-match + cost-tracker強化 + llm-semaphore
-// OpenHuman/OpenClaw/Hermes Agentの最終未抽出パターンを完全網羅
+// v1.34: NEW REPOS - agent-plugins + prompt-budget + worktree + feedback-scoring + backend-factory
+// toprank/ViMax/roborevから新しいパターンを抽出
 // ==========================================
 
 import "dotenv/config";
@@ -1016,8 +1016,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.33 起動中…");
-  logger.info(" DEEP CUTS: tokenjuice / error-classifier / fuzzy-match / cost-tracker");
+  logger.info(" Aikata v1.34 起動中…");
+  logger.info(" NEW REPOS: agent-plugins / prompt-budget / worktree / feedback-scoring / backend-factory");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
