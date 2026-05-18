@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.21: Reflection + SchedulerGate + Accessibility + Integrations + Onboarding
+// v1.22: Composio + Voice + Wallet + Update + LearningReflection
 // ==========================================
 
 import "dotenv/config";
@@ -628,6 +628,52 @@ registerCommand("situation", async (args) => {
   return cmds["/situation"] ? await cmds["/situation"](args ? args.split(" ") : []) : "❌ コマンドエラー";
 });
 
+// ==================== v1.22: 第21弾コマンド ====================
+
+registerCommand("composio", async (args) => {
+  const { composioClient } = await import("./composio");
+  return composioClient.formatStatus();
+});
+
+registerCommand("voice", async (args) => {
+  const { voiceManager } = await import("./voice");
+  const sub = args?.toLowerCase();
+  if (sub === "config" || !sub) return voiceManager.formatConfig();
+  return voiceManager.formatConfig();
+});
+
+registerCommand("wallet", async (args) => {
+  const { walletManager } = await import("./wallet");
+  const sub = args?.toLowerCase();
+  if (sub === "list" || sub === "ls") {
+    const wallets = walletManager.listAddresses();
+    if (wallets.length === 0) return "📭 登録済みウォレットはありません";
+    return wallets.map(w => walletManager.formatAddress(w)).join("\n\n");
+  }
+  if (sub === "chains") {
+    const chains = walletManager.listChains();
+    return "⛓️ **対応チェーン**\n" + chains.map(c => `- ${c.name} (${c.nativeCurrency})`).join("\n");
+  }
+  return "💰 **ウォレット**\n/wallet list — アドレス一覧\n/wallet chains — 対応チェーン";
+});
+
+registerCommand("learn", async (args) => {
+  const { learningManager } = await import("./learning-reflection");
+  const sub = args?.toLowerCase();
+  if (sub === "stats") return learningManager.formatStats();
+  if (sub === "rules") {
+    const rules = learningManager.listRules();
+    if (rules.length === 0) return "📭 学習ルールはありません";
+    return "🧠 **学習ルール一覧**\n\n" + rules.map(r => learningManager.formatRule(r)).join("\n\n");
+  }
+  if (sub === "high") {
+    const rules = learningManager.getHighConfidenceRules();
+    if (rules.length === 0) return "📭 高信頼度ルールはありません";
+    return "✅ **高信頼度ルール**\n\n" + rules.map(r => learningManager.formatRule(r)).join("\n\n");
+  }
+  return "🧠 **学習コマンド**\n/learn stats — 統計\n/learn rules — 全ルール\n/learn high — 高信頼度ルール";
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -692,8 +738,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.21 起動中…");
-  logger.info(" Reflection / SchedulerGate / Accessibility / Integrations / Onboarding");
+  logger.info(" Aikata v1.22 起動中…");
+  logger.info(" Composio / Voice / Wallet / Update / LearningReflection");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -785,7 +831,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /reflect /gate /a11y /integrations /onboard");
+  logger.info(" /composio /voice /wallet /learn /update");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）

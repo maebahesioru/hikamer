@@ -1,225 +1,250 @@
 // ==========================================
-// Aikata - ボイス/TTS出力（OpenHuman voice + audio_toolkit由来）
-// テキスト読み上げ・音声ファイル生成
+// Aikata - 音声処理（OpenHuman voice/ 由来）
+// 音声キャプチャ・TTS・音声認識・ホットキー
 // ==========================================
 
-import { writeFileSync, existsSync, mkdirSync } from "fs";
-import { resolve, dirname } from "path";
 import { logger } from "./utils/logger";
 import { execSync } from "child_process";
 
 // ==================== 型定義 ====================
 
-export type TTSProvider = "edge" | "openai" | "custom";
-export type VoiceStyle = "normal" | "cheerful" | "sad" | "angry" | "whisper" | "narration";
-
-interface TTSConfig {
-  provider: TTSProvider;
-  voice?: string;
-  rate?: number;       // 話速 0.5〜2.0
-  pitch?: number;      // ピッチ 0.5〜2.0
-  volume?: number;     // 音量 0.0〜1.0
+export interface VoiceConfig {
+  enabled: boolean;
+  inputDevice: string;
+  outputDevice: string;
+  sampleRate: number;
+  silenceThreshold: number;
+  vadEnabled: boolean;
+  hotkey: string;
 }
 
-// ==================== デフォルト設定 ====================
+export interface AudioCaptureResult {
+  filePath: string;
+  durationMs: number;
+  sampleRate: number;
+  channels: number;
+  peakAmplitude: number;
+}
 
-const DEFAULT_CONFIG: TTSConfig = {
-  provider: "edge",
-  voice: "ja-JP-NanamiNeural",
-  rate: 1.0,
-  pitch: 1.0,
-  volume: 1.0,
-};
+export interface TTSOptions {
+  voice: string;
+  speed: number;
+  pitch: number;
+  format: "wav" | "mp3" | "ogg";
+}
 
-// エッジボイス一覧
-const EDGE_VOICES: Record<string, string> = {
-  "nanami": "ja-JP-NanamiNeural",
-  "keita": "ja-JP-KeitaNeural",
-  "aoi": "ja-JP-AoiNeural",
-  "daichi": "ja-JP-DaichiNeural",
-  "mayu": "ja-JP-MayuNeural",
-  "naoki": "ja-JP-NaokiNeural",
-  "shiori": "ja-JP-ShioriNeural",
-  "en-US-jenny": "en-US-JennyNeural",
-  "en-US-guy": "en-US-GuyNeural",
-  "en-US-aria": "en-US-AriaNeural",
-};
+// ==================== 音声マネージャー ====================
 
-// ==================== TTSエンジン ====================
+class VoiceManager {
+  private config: VoiceConfig = {
+    enabled: false,
+    inputDevice: "default",
+    outputDevice: "default",
+    sampleRate: 16000,
+    silenceThreshold: 0.03,
+    vadEnabled: true,
+    hotkey: "Ctrl+Shift+V",
+  };
 
-class TTSEngine {
-  private config: TTSConfig;
-  private outputDir: string;
+  private recordings: Map<string, AudioCaptureResult> = new Map();
+  private initialized = false;
 
-  constructor(config: Partial<TTSConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
-    this.outputDir = resolve(process.env.DATA_DIR || "./data", "tts");
-    if (!existsSync(this.outputDir)) {
-      mkdirSync(this.outputDir, { recursive: true });
-    }
+  init(): void {
+    if (this.initialized) return;
+    this.detectPlatform();
+    this.initialized = true;
+    logger.info("[Voice] initialized");
   }
 
-  /** 音声ファイルを生成 */
-  async synthesize(
-    text: string,
-    options?: {
-      voice?: string;
-      rate?: number;
-      pitch?: number;
-      filename?: string;
-    },
-  ): Promise<string> {
-    const voice = options?.voice || this.config.voice || "ja-JP-NanamiNeural";
-    const rate = options?.rate || this.config.rate || 1.0;
-    const pitch = options?.pitch || this.config.pitch || 1.0;
-
-    // 出力ファイルパス
-    const timestamp = Date.now().toString(36);
-    const filename = options?.filename || `tts-${timestamp}.mp3`;
-    const outputPath = resolve(this.outputDir, filename);
-
-    if (this.config.provider === "edge") {
-      return this.synthesizeEdge(text, voice, rate, pitch, outputPath);
-    } else if (this.config.provider === "openai") {
-      return this.synthesizeOpenAI(text, voice, outputPath);
-    }
-    throw new Error(`未対応のTTSプロバイダー: ${this.config.provider}`);
-  }
-
-  /** Edge TTS（edge-tts CLIが必要）*/
-  private async synthesizeEdge(
-    text: string,
-    voice: string,
-    rate: number,
-    pitch: number,
-    outputPath: string,
-  ): Promise<string> {
-    // メッセージ分割（Edge TTSは1回あたり3000文字制限）
-    const chunks = this.splitText(text, 2500);
-    const outputPaths: string[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunkPath = chunks.length === 1
-        ? outputPath
-        : outputPath.replace(".mp3", `-part${i + 1}.mp3`);
-
-      try {
-        // edge-ttsコマンドがインストール済みかチェック
-        const hasEdgeTts = execSync("which edge-tts 2>/dev/null || true", { timeout: 2000 })
-          .toString().trim();
-
-        if (!hasEdgeTts) {
-          // pip install edge-tts を試す
-          logger.info("[TTS] edge-ttsが未インストール。pip installを試行…");
-          execSync("pip install edge-tts 2>/dev/null || pip3 install edge-tts 2>/dev/null || true", { timeout: 30000 });
-        }
-
-        const cmd = [
-          "edge-tts",
-          `--voice "${voice}"`,
-          `--text "${this.escapeShell(text)}"`,
-          `--write-media "${chunkPath}"`,
-          `--rate=${rate > 0 ? "+" : ""}${Math.round((rate - 1) * 100)}%`,
-          `--pitch=${pitch > 0 ? "+" : ""}${Math.round((pitch - 1) * 100)}Hz`,
-        ].join(" ");
-
-        execSync(cmd, { timeout: 30000, stdio: "ignore" });
-        outputPaths.push(chunkPath);
-      } catch (e: any) {
-        logger.warn(`[TTS] Edge TTS失敗: ${e.message}`);
-        // フォールバック: 単純なテキストファイルを作成
-        const fallbackPath = chunkPath.replace(".mp3", ".txt");
-        writeFileSync(fallbackPath, `[TTS不可] ${text.slice(0, 200)}`, "utf-8");
-        outputPaths.push(fallbackPath);
-      }
+  /** 音声キャプチャ開始 */
+  async startCapture(
+    durationMs?: number
+  ): Promise<AudioCaptureResult | null> {
+    if (!this.checkAvailable()) {
+      logger.warn("[Voice] audio capture not available");
+      return null;
     }
 
-    return outputPaths.length === 1 ? outputPaths[0]! : outputPath;
-  }
-
-  /** OpenAI TTS */
-  private async synthesizeOpenAI(
-    text: string,
-    voice: string,
-    outputPath: string,
-  ): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      logger.warn("[TTS] OPENAI_API_KEY未設定。代替テキスト出力。");
-      writeFileSync(outputPath.replace(".mp3", ".txt"), `[TTS] ${text.slice(0, 200)}`, "utf-8");
-      return outputPath.replace(".mp3", ".txt");
-    }
+    const start = Date.now();
+    const id = `rec-${Date.now()}`;
+    const filePath = `/tmp/aikata-voice-${id}.wav`;
 
     try {
-      const response = await fetch("https://api.openai.com/v1/audio/speech", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "tts-1",
-          input: text.slice(0, 4096),
-          voice: voice || "alloy",
-          response_format: "mp3",
-        }),
-      });
+      // arecord (Linux) / ffmpeg で録音
+      if (this.hasCommand("arecord")) {
+        const dur = durationMs ?? 5000;
+        execSync(
+          `arecord -d ${Math.ceil(dur / 1000)} -f S16_LE -r ${this.config.sampleRate} -c 1 ${filePath}`,
+          { timeout: dur + 5000 }
+        );
+      } else if (this.hasCommand("ffmpeg")) {
+        const dur = durationMs ?? 5000;
+        execSync(
+          `ffmpeg -f pulse -i ${this.config.inputDevice} -t ${Math.ceil(dur / 1000)} -ac 1 -ar ${this.config.sampleRate} ${filePath} -y`,
+          { timeout: dur + 5000 }
+        );
+      } else {
+        logger.warn("[Voice] no capture tool found");
+        return null;
+      }
 
-      if (!response.ok) throw new Error(`OpenAI TTS: ${response.status}`);
+      const result: AudioCaptureResult = {
+        filePath,
+        durationMs: Date.now() - start,
+        sampleRate: this.config.sampleRate,
+        channels: 1,
+        peakAmplitude: 0,
+      };
 
-      const arrayBuffer = await response.arrayBuffer();
-      writeFileSync(outputPath, Buffer.from(arrayBuffer));
+      this.recordings.set(id, result);
+      logger.info(`[Voice] captured ${filePath} (${result.durationMs}ms)`);
+      return result;
+    } catch (err) {
+      logger.error("[Voice] capture failed:", err);
+      return null;
+    }
+  }
+
+  /** TTS（テキスト読み上げ） */
+  async speak(
+    text: string,
+    options?: Partial<TTSOptions>
+  ): Promise<string | null> {
+    const opts: TTSOptions = {
+      voice: options?.voice ?? "default",
+      speed: options?.speed ?? 1.0,
+      pitch: options?.pitch ?? 1.0,
+      format: options?.format ?? "wav",
+    };
+
+    const outputPath = `/tmp/aikata-tts-${Date.now()}.${opts.format}`;
+
+    try {
+      if (this.hasCommand("espeak")) {
+        execSync(
+          `espeak "${text.slice(0, 200)}" -w ${outputPath}`,
+          { timeout: 10000 }
+        );
+      } else if (this.hasCommand("ffmpeg")) {
+        // ffmpeg で簡易TTSは不可 → 代わりにsayコマンド
+        if (this.hasCommand("say")) {
+          execSync(
+            `say "${text.slice(0, 200)}" -o ${outputPath.replace(/\.[^.]+$/, ".aiff")}`,
+            { timeout: 10000 }
+          );
+        } else {
+          logger.warn("[Voice] no TTS tool found");
+          return null;
+        }
+      } else {
+        logger.warn("[Voice] no TTS tool found");
+        return null;
+      }
+
+      logger.info(`[Voice] TTS: "${text.slice(0, 50)}..." -> ${outputPath}`);
       return outputPath;
-    } catch (e: any) {
-      logger.warn(`[TTS] OpenAI TTS失敗: ${e.message}`);
-      writeFileSync(outputPath.replace(".mp3", ".txt"), `[TTS Error] ${e.message}`, "utf-8");
-      return outputPath.replace(".mp3", ".txt");
+    } catch (err) {
+      logger.error("[Voice] TTS failed:", err);
+      return null;
     }
   }
 
-  // ==================== ユーティリティ ====================
+  /** 音声認識（簡易：ファイルパスを受け取って認識） */
+  async transcribe(
+    audioPath: string
+  ): Promise<string | null> {
+    if (!this.checkAvailable()) return null;
 
-  private splitText(text: string, maxLen: number): string[] {
-    const chunks: string[] = [];
-    let remaining = text;
-    while (remaining.length > maxLen) {
-      // 文の切れ目で分割
-      let cut = remaining.lastIndexOf("。", maxLen);
-      if (cut === -1 || cut < maxLen / 2) cut = remaining.lastIndexOf("\n", maxLen);
-      if (cut === -1 || cut < maxLen / 2) cut = remaining.lastIndexOf(" ", maxLen);
-      if (cut === -1 || cut < maxLen / 2) cut = maxLen;
-      chunks.push(remaining.slice(0, cut + 1));
-      remaining = remaining.slice(cut + 1).trim();
+    try {
+      if (this.hasCommand("whisper")) {
+        const output = execSync(
+          `whisper ${audioPath} --language ja --output_format txt 2>/dev/null`,
+          { timeout: 60000 }
+        );
+        return output.toString().trim();
+      }
+      logger.warn("[Voice] whisper not available");
+      return null;
+    } catch (err) {
+      logger.error("[Voice] transcription failed:", err);
+      return null;
     }
-    if (remaining) chunks.push(remaining);
-    return chunks;
   }
 
-  private escapeShell(text: string): string {
-    return text
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"')
-      .replace(/`/g, "\\`")
-      .replace(/\$/g, "\\$")
-      .replace(/\n/g, " ")
-      .slice(0, 2500);
+  /** 音声レベルの検出（VAD） */
+  detectVoiceActivity(audioBuffer: Buffer): boolean {
+    if (!this.config.vadEnabled) return true;
+
+    let sum = 0;
+    let count = 0;
+
+    for (let i = 0; i < audioBuffer.length; i += 2) {
+      const sample = audioBuffer.readInt16LE(i);
+      sum += Math.abs(sample);
+      count++;
+    }
+
+    const avgAmplitude = count > 0 ? sum / count : 0;
+    const normalized = avgAmplitude / 32768;
+    return normalized > this.config.silenceThreshold;
   }
 
-  /** 利用可能なボイス一覧 */
-  getAvailableVoices(): Record<string, string> {
-    return { ...EDGE_VOICES };
-  }
-
-  updateConfig(config: Partial<TTSConfig>): void {
+  /** 設定の更新 */
+  setConfig(config: Partial<VoiceConfig>): void {
     this.config = { ...this.config, ...config };
+  }
+
+  getConfig(): VoiceConfig {
+    return { ...this.config };
+  }
+
+  /** 録音履歴 */
+  getRecordings(): AudioCaptureResult[] {
+    return [...this.recordings.values()];
+  }
+
+  // ---- 内部 ----
+
+  private detectPlatform(): void {
+    if (process.platform === "win32") {
+      this.config.inputDevice = "default";
+    } else if (process.platform === "darwin") {
+      this.config.inputDevice = "default";
+    }
+  }
+
+  private checkAvailable(): boolean {
+    return this.hasCommand("arecord") || this.hasCommand("ffmpeg");
+  }
+
+  private hasCommand(cmd: string): boolean {
+    try {
+      execSync(`which ${cmd} 2>/dev/null`, { timeout: 3000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  formatConfig(): string {
+    const cap = this.checkAvailable();
+    return (
+      `🎙️ **音声設定**\n` +
+      `有効: ${this.config.enabled ? "✅" : "❌"}\n` +
+      `入力: ${this.config.inputDevice}\n` +
+      `出力: ${this.config.outputDevice}\n` +
+      `サンプルレート: ${this.config.sampleRate}Hz\n` +
+      `VAD: ${this.config.vadEnabled ? "✅" : "❌"}\n` +
+      `ホットキー: ${this.config.hotkey}\n` +
+      `\n利用可能: ${cap ? "arecord ✅" : "❌ 録音ツールなし"}` +
+      ` ${this.hasCommand("espeak") ? "espeak ✅" : ""}` +
+      ` ${this.hasCommand("whisper") ? "whisper ✅" : ""}`
+    );
   }
 }
 
 // ==================== シングルトン ====================
 
-export const ttsEngine = new TTSEngine();
+export const voiceManager = new VoiceManager();
 
-/** クイックTTS */
-export async function speak(text: string, voice?: string): Promise<string> {
-  return ttsEngine.synthesize(text, { voice });
-}
+export default VoiceManager;

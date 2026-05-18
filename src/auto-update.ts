@@ -1,266 +1,265 @@
 // ==========================================
-// Aikata - 自動更新（OpenHuman update由来）
-// Git pull + 依存更新 + 再起動
+// Aikata - 自動アップデート（OpenHuman update/ 由来）
+// Gitベースの自動更新・バージョンチェック・再起動
 // ==========================================
 
-import { execSync, spawn } from "child_process";
 import { logger } from "./utils/logger";
-import { eventBus, createEvent } from "./event-bus";
+import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
-// ==================== 更新管理 ====================
+// ==================== 型定義 ====================
 
-interface UpdateInfo {
-  currentCommit: string;
-  currentTag: string;
-  remoteCommit: string;
-  remoteTag: string;
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string | null;
   hasUpdate: boolean;
-  commitsBehind: number;
+  lastCheckAt: number | null;
+  updateAvailable: boolean;
   changelog: string[];
 }
 
-interface UpdateResult {
+export interface UpdateResult {
   success: boolean;
-  pulled: boolean;
-  depsInstalled: boolean;
-  restartRequired: boolean;
-  message: string;
-  changelog?: string[];
+  previousVersion: string;
+  newVersion: string | null;
+  durationMs: number;
+  changes: string[];
+  error?: string;
 }
 
-class AutoUpdater {
+// ==================== アップデートマネージャー ====================
+
+class UpdateManager {
   private repoPath: string;
-  private checking = false;
+  private currentVersion: string;
+  private lastCheckAt: number | null = null;
+  private cachedLatestVersion: string | null = null;
+  private updating = false;
 
   constructor(repoPath?: string) {
-    this.repoPath = repoPath || process.cwd();
+    this.repoPath = repoPath ?? process.cwd();
+    this.currentVersion = this.detectVersion();
   }
 
-  /** 更新があるかチェック */
-  checkForUpdates(): UpdateInfo {
+  init(): void {
+    logger.info(`[Update] current version: ${this.currentVersion}`);
+  }
+
+  /** 更新をチェック */
+  async checkForUpdate(): Promise<UpdateInfo> {
+    if (this.updating) {
+      return {
+        currentVersion: this.currentVersion,
+        latestVersion: this.cachedLatestVersion,
+        hasUpdate: false,
+        lastCheckAt: this.lastCheckAt,
+        updateAvailable: false,
+        changelog: [],
+      };
+    }
+
+    this.lastCheckAt = Date.now();
+    const isGitRepo = this.checkIsGitRepo();
+
+    if (!isGitRepo) {
+      return {
+        currentVersion: this.currentVersion,
+        latestVersion: null,
+        hasUpdate: false,
+        lastCheckAt: this.lastCheckAt,
+        updateAvailable: false,
+        changelog: [],
+      };
+    }
+
     try {
-      const currentCommit = execSync("git rev-parse HEAD", {
-        cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-      }).toString().trim();
-
-      const currentTag = this.getCurrentTag();
-
-      // remote fetch
-      execSync("git fetch --tags", {
-        cwd: this.repoPath, timeout: 15000, encoding: "utf-8",
+      // リモートの最新を取得
+      execSync("git fetch origin 2>/dev/null", {
+        cwd: this.repoPath,
+        timeout: 15000,
       });
 
-      const remoteCommit = execSync("git rev-parse origin/main", {
-        cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-      }).toString().trim();
+      // ローカルとリモートの差分をチェック
+      const behind = execSync(
+        "git rev-list --count HEAD..origin/main 2>/dev/null || git rev-list --count HEAD..origin/master 2>/dev/null",
+        { cwd: this.repoPath, timeout: 5000 }
+      )
+        .toString()
+        .trim();
 
-      // タグ取得
-      let remoteTag = "";
-      try {
-        remoteTag = execSync("git describe --tags origin/main 2>/dev/null || echo ''", {
-          cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-        }).toString().trim();
-      } catch {}
+      const behindCount = parseInt(behind, 10);
+      const hasUpdate = !isNaN(behindCount) && behindCount > 0;
 
-      // ビハインド数
-      let commitsBehind = 0;
-      try {
-        const behind = execSync(`git rev-list --count HEAD..origin/main 2>/dev/null || echo "0"`, {
-          cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-        }).toString().trim();
-        commitsBehind = parseInt(behind, 10) || 0;
-      } catch {}
-
-      // 変更履歴
+      // 最新バージョン
+      let latestVersion: string | null = null;
       let changelog: string[] = [];
-      if (commitsBehind > 0) {
-        try {
-          const log = execSync("git log HEAD..origin/main --oneline --no-decorate 2>/dev/null || true", {
-            cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-          }).toString().trim();
-          changelog = log.split("\n").filter(Boolean).slice(0, 20);
-        } catch {}
+
+      if (hasUpdate) {
+        // リモートの最新コミットメッセージを取得
+        const log = execSync(
+          `git log HEAD..origin/main --oneline --no-decorate 2>/dev/null || git log HEAD..origin/master --oneline --no-decorate 2>/dev/null`,
+          { cwd: this.repoPath, timeout: 5000 }
+        )
+          .toString()
+          .trim();
+
+        changelog = log.split("\n").filter(Boolean).slice(0, 20);
+        latestVersion = `origin/main (${behindCount}コミット先)`;
+        this.cachedLatestVersion = latestVersion;
       }
 
-      const result: UpdateInfo = {
-        currentCommit: currentCommit.slice(0, 12),
-        currentTag,
-        remoteCommit: remoteCommit.slice(0, 12),
-        remoteTag,
-        hasUpdate: currentCommit !== remoteCommit,
-        commitsBehind,
+      return {
+        currentVersion: this.currentVersion,
+        latestVersion,
+        hasUpdate,
+        lastCheckAt: this.lastCheckAt,
+        updateAvailable: hasUpdate,
         changelog,
       };
-
-      logger.info(`[Updater] 更新チェック: ${result.commitsBehind}件遅れ (${result.hasUpdate ? "更新あり" : "最新"})`);
-      return result;
-    } catch (e: any) {
-      logger.warn(`[Updater] チェック失敗: ${e.message}`);
+    } catch {
       return {
-        currentCommit: "unknown", currentTag: "", remoteCommit: "",
-        remoteTag: "", hasUpdate: false, commitsBehind: 0, changelog: [],
+        currentVersion: this.currentVersion,
+        latestVersion: null,
+        hasUpdate: false,
+        lastCheckAt: this.lastCheckAt,
+        updateAvailable: false,
+        changelog: [],
       };
     }
   }
 
-  /** 更新を適用（git pull + npm install） */
-  applyUpdate(): UpdateResult {
+  /** 更新を実行 */
+  async performUpdate(): Promise<UpdateResult> {
+    const start = Date.now();
+    const previousVersion = this.currentVersion;
+
+    if (this.updating) {
+      return { success: false, previousVersion, newVersion: null, durationMs: Date.now() - start, changes: [], error: "Already updating" };
+    }
+
+    this.updating = true;
+
     try {
-      const info = this.checkForUpdates();
+      const info = await this.checkForUpdate();
       if (!info.hasUpdate) {
-        return {
-          success: true,
-          pulled: false,
-          depsInstalled: false,
-          restartRequired: false,
-          message: "既に最新です。",
-        };
+        this.updating = false;
+        return { success: false, previousVersion, newVersion: null, durationMs: Date.now() - start, changes: [], error: "No update available" };
       }
 
-      // git pull
-      logger.info(`[Updater] Pull開始: ${info.commitsBehind}コミット`);
-      const pullOutput = execSync("git pull origin main --ff-only 2>&1 || git pull origin main 2>&1", {
-        cwd: this.repoPath, timeout: 30000, encoding: "utf-8",
-      }).toString().trim();
-      logger.info(`[Updater] Pull完了: ${pullOutput.slice(0, 200)}`);
+      // プル
+      execSync("git pull --ff-only origin main 2>/dev/null || git pull --ff-only origin master 2>/dev/null", {
+        cwd: this.repoPath,
+        timeout: 30000,
+      });
 
-      // 依存関係更新
-      let depsInstalled = false;
-      try {
-        // package.jsonの変更を検出
-        const pkgChanged = execSync("git diff HEAD@{1}..HEAD --name-only 2>/dev/null || echo ''", {
-          cwd: this.repoPath, timeout: 5000, encoding: "utf-8",
-        }).toString().trim();
-
-        if (pkgChanged.includes("package.json") || pkgChanged.includes("package-lock.json")) {
-          logger.info("[Updater] 依存関係更新…");
-          execSync("npm install 2>&1 || true", {
-            cwd: this.repoPath, timeout: 60000,
-          });
-          depsInstalled = true;
-          logger.info("[Updater] 依存関係更新完了");
-        }
-      } catch (e: any) {
-        logger.warn(`[Updater] 依存更新スキップ: ${e.message}`);
+      // npm install（依存関係更新）
+      if (fs.existsSync(path.join(this.repoPath, "package.json"))) {
+        execSync("npm install 2>/dev/null", {
+          cwd: this.repoPath,
+          timeout: 60000,
+        });
       }
 
-      eventBus.publish(createEvent("system", "updateApplied", {
-        commits: info.commitsBehind,
-        changelog: info.changelog,
-      }));
+      const newVersion = this.detectVersion();
+      this.currentVersion = newVersion;
+
+      logger.info(`[Update] updated: ${previousVersion} → ${newVersion}`);
 
       return {
         success: true,
-        pulled: true,
-        depsInstalled,
-        restartRequired: true,
-        message: `更新完了: ${info.commitsBehind}コミット反映`,
-        changelog: info.changelog,
+        previousVersion,
+        newVersion,
+        durationMs: Date.now() - start,
+        changes: info.changelog,
       };
-    } catch (e: any) {
-      logger.error(`[Updater] 更新失敗: ${e.message}`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error(`[Update] failed: ${errMsg}`);
       return {
         success: false,
-        pulled: false,
-        depsInstalled: false,
-        restartRequired: false,
-        message: `更新失敗: ${e.message}`,
+        previousVersion,
+        newVersion: null,
+        durationMs: Date.now() - start,
+        changes: [],
+        error: errMsg.slice(0, 200),
       };
+    } finally {
+      this.updating = false;
     }
   }
 
-  /** プロセス再起動 */
-  restart(): void {
-    logger.info("[Updater] 再起動…");
-    eventBus.publish(createEvent("system", "restarting", {
-      reason: "update",
-    }));
-
-    // 現在のプロセスを置き換え
-    const args = process.argv.slice(1);
-    const cmd = process.execPath;
-
-    // 子プロセスとして新しいインスタンス起動
-    const child = spawn(cmd, args, {
-      stdio: "inherit",
-      detached: true,
-      env: { ...process.env, AIKATA_RESTART: "1" },
-    });
-    child.unref();
-
-    // 現在のプロセス終了
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
+  /** バージョン情報を取得 */
+  getVersion(): string {
+    return this.currentVersion;
   }
 
-  /** 自動更新ループを開始 */
-  startAutoUpdate(intervalMs: number = 3600000): void {
-    // チェック→更新→再起動のループ
-    setInterval(async () => {
-      if (this.checking) return;
-      this.checking = true;
-
-      try {
-        const info = this.checkForUpdates();
-        if (info.hasUpdate) {
-          logger.info(`[Updater] 自動更新検出: ${info.commitsBehind}コミット`);
-          const result = this.applyUpdate();
-          if (result.success && result.restartRequired) {
-            logger.info("[Updater] 更新適用完了。再起動します…");
-            setTimeout(() => this.restart(), 5000);
-          }
-        }
-      } catch (e: any) {
-        logger.error(`[Updater] 自動更新エラー: ${e.message}`);
-      } finally {
-        this.checking = false;
-      }
-    }, intervalMs);
-
-    logger.info(`[Updater] 自動更新ループ開始: ${intervalMs / 60000}分間隔`);
+  /** バージョンタグを設定 */
+  setVersionTag(tag: string): void {
+    this.currentVersion = tag;
   }
 
-  /** 情報表示 */
-  formatInfo(): string {
-    const info = this.checkForUpdates();
+  // ---- 内部 ----
 
-    const lines = [
-      "🔄 **アップデート状態**",
-      `現在: \`${info.currentCommit}\``,
-    ];
-
-    if (info.currentTag) lines.push(`タグ: ${info.currentTag}`);
-
-    if (info.hasUpdate) {
-      lines.push(`リモート: \`${info.remoteCommit}\``);
-      if (info.remoteTag) lines.push(`リモートタグ: ${info.remoteTag}`);
-      lines.push(`**${info.commitsBehind}コミット遅れ**`);
-      if (info.changelog.length > 0) {
-        lines.push("", "**変更履歴:**");
-        for (const log of info.changelog.slice(0, 10)) {
-          lines.push(`  ${log}`);
-        }
-      }
-      lines.push("", "`/update apply` で更新を適用");
-    } else {
-      lines.push("✅ **最新です**");
-    }
-
-    return lines.join("\n");
-  }
-
-  private getCurrentTag(): string {
+  private detectVersion(): string {
     try {
-      return execSync("git describe --tags --exact-match HEAD 2>/dev/null || echo ''", {
-        cwd: this.repoPath, timeout: 3000, encoding: "utf-8",
-      }).toString().trim();
+      if (this.checkIsGitRepo()) {
+        const hash = execSync("git rev-parse --short HEAD 2>/dev/null", {
+          cwd: this.repoPath,
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
+        if (hash) return hash;
+
+        const tag = execSync("git describe --tags 2>/dev/null", {
+          cwd: this.repoPath,
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
+        if (tag) return tag;
+      }
     } catch {
-      return "";
+      // ignore
     }
+
+    // package.jsonから
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(this.repoPath, "package.json"), "utf-8")
+      ) as { version?: string };
+      return pkg.version ?? "unknown";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  private checkIsGitRepo(): boolean {
+    try {
+      return fs.existsSync(path.join(this.repoPath, ".git"));
+    } catch {
+      return false;
+    }
+  }
+
+  formatInfo(info: UpdateInfo): string {
+    return (
+      `🔄 **アップデート情報**\n` +
+      `現在: \`${info.currentVersion}\`\n` +
+      `最新: ${info.latestVersion ? `\`${info.latestVersion}\`` : "確認できず"}\n` +
+      `更新: ${info.hasUpdate ? "✅ あり" : "なし"}\n` +
+      `最終確認: ${info.lastCheckAt ? new Date(info.lastCheckAt).toLocaleString("ja-JP") : "未確認"}\n\n` +
+      (info.changelog.length > 0
+        ? `**変更履歴（直近${info.changelog.length}件）**\n` +
+          info.changelog.map((c) => `- ${c}`).join("\n")
+        : "")
+    );
   }
 }
 
 // ==================== シングルトン ====================
 
-export const autoUpdater = new AutoUpdater();
+export const updateManager = new UpdateManager();
+
+export default UpdateManager;
