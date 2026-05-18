@@ -54,7 +54,7 @@ function refreshJobs(deps: SchedulerDeps): void {
       try {
         const result = await agentLoop(
           deps.provider,
-          buildSystemPrompt(),
+          await buildSystemPrompt(),
           job.prompt,
           job.conversation_id
         );

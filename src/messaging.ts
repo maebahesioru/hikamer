@@ -618,7 +618,7 @@ export async function startDiscord(token: string): Promise<Client> {
       setOnRetry((msg) => { sendInThread(msg).catch(() => {}); });
 
       const result = await agentLoop(
-        provider, buildSystemPrompt(), cleanContent || "こんにちは",
+        provider, await buildSystemPrompt(), cleanContent || "こんにちは",
         threadId || cid, "discord", options,
       );
 
@@ -805,7 +805,7 @@ export async function startTelegramBot(
     const thinking = await ctx.reply("考え中…");
 
     try {
-      const result = await agentLoop(provider, buildSystemPrompt(), ctx.message.text, cid, "telegram");
+      const result = await agentLoop(provider, await buildSystemPrompt(), ctx.message.text, cid, "telegram");
 
       if (result.response.length <= 4000) {
         await ctx.api.editMessageText(chatId, thinking.message_id, result.response);

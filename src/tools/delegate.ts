@@ -136,7 +136,7 @@ async function runSubagent(goal: string, context: string): Promise<string> {
     const provider = createActiveProvider();
     const result = await agentLoop(
       provider,
-      buildSystemPrompt(),
+      await buildSystemPrompt(),
       message,
       subId,
       "cli",
