@@ -868,3 +868,186 @@ function hashString(s: string): number {
   }
   return hash;
 }
+
+// ==========================================
+// SimHash スケッチプリフィルター（memvid 15k stars パターン）
+// 大規模検索の前にハミング距離で候補を絞り込む
+// ==========================================
+
+/** SimHashビット数（デフォルト64） */
+const SIMHASH_BITS = 64;
+
+/** ハミング距離のしきい値（これ以下のものを候補として残す） */
+const HAMMING_THRESHOLD = 8;
+
+/**
+ * テキストのSimHashフィンガープリントを計算。
+ * memvidの SimHash::sketch() 相当。
+ * 各トークンをハッシュ化し、ビットごとに重み付き加算→符号で0/1決定。
+ */
+export function computeSimHash(text: string): bigint {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\s-]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 2);
+
+  if (tokens.length === 0) return 0n;
+
+  const weights = new Array(SIMHASH_BITS).fill(0);
+
+  for (const token of tokens) {
+    const h = hashStringBigInt(token);
+    for (let i = 0; i < SIMHASH_BITS; i++) {
+      const bit = (h >> BigInt(i)) & 1n;
+      weights[i] += bit === 1n ? 1 : -1;
+    }
+  }
+
+  let fingerprint = 0n;
+  for (let i = 0; i < SIMHASH_BITS; i++) {
+    if (weights[i]! > 0) {
+      fingerprint |= (1n << BigInt(i));
+    }
+  }
+
+  return fingerprint;
+}
+
+/** 2つのSimHash間のハミング距離を計算 */
+export function hammingDistance(a: bigint, b: bigint): number {
+  let xor = a ^ b;
+  let dist = 0;
+  while (xor > 0n) {
+    dist += Number(xor & 1n);
+    xor >>= 1n;
+  }
+  return dist;
+}
+
+/**
+ * SimHashプリフィルター。
+ * 候補ドキュメント群とクエリSimHashを受け取り、
+ * ハミング距離がしきい値以下のものだけを返す。
+ */
+export function simHashPreFilter(
+  queryHash: bigint,
+  candidates: { id: string; simhash: bigint }[],
+  threshold: number = HAMMING_THRESHOLD,
+): string[] {
+  const matched: string[] = [];
+  for (const c of candidates) {
+    if (hammingDistance(queryHash, c.simhash) <= threshold) {
+      matched.push(c.id);
+    }
+  }
+  return matched;
+}
+
+function hashStringBigInt(s: string): bigint {
+  let hash = 0n;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5n) - hash) + BigInt(s.charCodeAt(i));
+  }
+  return hash;
+}
+
+// ==========================================
+// 適応的結果カットオフ（memvid adaptive cutoff パターン）
+// スコアの勾配から動的に最適なkを決定
+// ==========================================
+
+export interface AdaptiveCutoffResult {
+  results: SearchResult[];
+  cutoffIndex: number;
+  method: "elbow" | "cliff" | "ratio" | "none";
+}
+
+/**
+ * スコア分布から適応的にカットオフ位置を決定。
+ * memvidの evaluate_scores → cutoff 相当。
+ *
+ * 3つの検出方式を試し、最初に発見したものを採用:
+ * 1. Elbow（肘）検出: スコアの2次微分の最大点
+ * 2. Cliff（崖）検出: 隣接スコア差が平均差の3倍超
+ * 3. Ratio検出: スコアが最大スコアの30%未満に落ちた地点
+ */
+export function adaptiveCutoff(
+  results: SearchResult[],
+  options?: { minResults?: number; maxResults?: number },
+): AdaptiveCutoffResult {
+  const minResults = options?.minResults ?? 3;
+  const maxResults = options?.maxResults ?? 50;
+
+  if (results.length <= minResults) {
+    return { results, cutoffIndex: results.length, method: "none" };
+  }
+
+  // 1. Elbow検出: 2次微分
+  if (results.length >= 5) {
+    const deltas: number[] = [];
+    for (let i = 1; i < results.length; i++) {
+      deltas.push(results[i - 1]!.score - results[i]!.score);
+    }
+    const secondDeriv: number[] = [];
+    for (let i = 1; i < deltas.length; i++) {
+      secondDeriv.push(deltas[i]! - deltas[i - 1]!);
+    }
+
+    let maxDerivIdx = 0;
+    let maxDeriv = 0;
+    for (let i = 0; i < secondDeriv.length; i++) {
+      if (secondDeriv[i]! > maxDeriv) {
+        maxDeriv = secondDeriv[i]!;
+        maxDerivIdx = i;
+      }
+    }
+
+    if (maxDeriv > 0.01) {
+      const elbowIdx = Math.max(minResults, Math.min(maxDerivIdx + 2, maxResults));
+      return {
+        results: results.slice(0, elbowIdx),
+        cutoffIndex: elbowIdx,
+        method: "elbow",
+      };
+    }
+  }
+
+  // 2. Cliff検出
+  const diffs: number[] = [];
+  for (let i = 1; i < results.length; i++) {
+    diffs.push(results[i - 1]!.score - results[i]!.score);
+  }
+  const avgDiff = diffs.reduce((s, d) => s + d, 0) / diffs.length;
+
+  for (let i = 0; i < diffs.length; i++) {
+    if (diffs[i]! > avgDiff * 3 && i >= minResults) {
+      const cliffIdx = Math.min(i + 1, maxResults);
+      return {
+        results: results.slice(0, cliffIdx),
+        cutoffIndex: cliffIdx,
+        method: "cliff",
+      };
+    }
+  }
+
+  // 3. Ratio検出
+  const maxScore = results[0]!.score;
+  for (let i = minResults; i < results.length; i++) {
+    if (results[i]!.score < maxScore * 0.3) {
+      return {
+        results: results.slice(0, i),
+        cutoffIndex: i,
+        method: "ratio",
+      };
+    }
+  }
+
+  // フォールバック: maxResultsで切る
+  const fallbackIdx = Math.min(results.length, maxResults);
+  return {
+    results: results.slice(0, fallbackIdx),
+    cutoffIndex: fallbackIdx,
+    method: "none",
+  };
+}

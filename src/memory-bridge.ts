@@ -544,3 +544,116 @@ function findAtomicNoteById(id: string): AtomicNote | null {
   }
   return null;
 }
+
+// ==========================================
+// MemoryCard SPO抽出（memvid 15k stars パターン）
+// 平文テキストから Subject-Predicate-Object トリプレットを抽出
+// エンティティ関係グラフを自動構築
+// ==========================================
+
+/** SPOトリプレット */
+export interface SPOTriple {
+  subject: string;
+  predicate: string;
+  object: string;
+  /** 極性（true=肯定, false=否定） */
+  polarity: boolean;
+  /** 抽出元テキストの参照 */
+  source?: string;
+  /** 信頼度（0-1） */
+  confidence: number;
+}
+
+/** SPO検索クエリ: ? はワイルドカード */
+export interface SPOQuery {
+  subject?: string;
+  predicate?: string;
+  object?: string;
+}
+
+/** 日本語・英語のSPO抽出パターン */
+const SPO_PATTERNS: { pattern: RegExp; predicate: string; polarity: boolean }[] = [
+  // 日本語: 「AはBである」
+  { pattern: /([^\s、。，．,]{2,30})は([^\s、。，．,]{1,50})である/g, predicate: "is_a", polarity: true },
+  { pattern: /([^\s、。，．,]{2,30})が([^\s、。，．,]{1,50})である/g, predicate: "is_a", polarity: true },
+  // 日本語: 「AはBではない」
+  { pattern: /([^\s、。，．,]{2,30})は([^\s、。，．,]{1,50})ではない/g, predicate: "is_a", polarity: false },
+  // 日本語: 「AはBを持つ」
+  { pattern: /([^\s、。，．,]{2,30})は([^\s、。，．,]{1,50})を持つ/g, predicate: "has", polarity: true },
+  { pattern: /([^\s、。，．,]{2,30})が([^\s、。，．,]{1,50})を持つ/g, predicate: "has", polarity: true },
+  // 日本語: 「AはBを使う/使用する」
+  { pattern: /([^\s、。，．,]{2,30})は([^\s、。，．,]{1,50})を使(?:用|う)/g, predicate: "uses", polarity: true },
+  // 日本語: 「AはBにある/存在する」
+  { pattern: /([^\s、。，．,]{2,30})は([^\s、。，．,]{1,50})にある/g, predicate: "located_in", polarity: true },
+  // 英語: "A is B"
+  { pattern: /([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\s+is\s+(?:a\s+|an\s+|the\s+)?([a-z][\w\s]{1,40}?)(?:\.|,|\s+and|\s+but|\s+which|$)/gi, predicate: "is_a", polarity: true },
+  // 英語: "A is not B"
+  { pattern: /([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\s+is\s+not\s+(?:a\s+|an\s+|the\s+)?([a-z][\w\s]{1,40}?)(?:\.|,|\s+and|\s+but|$)/gi, predicate: "is_a", polarity: false },
+  // 英語: "A has B"
+  { pattern: /([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\s+has\s+(?:a\s+|an\s+|the\s+)?([a-z][\w\s]{1,40}?)(?:\.|,|\s+and|\s+but|$)/gi, predicate: "has", polarity: true },
+  // 英語: "A uses B"
+  { pattern: /([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\s+uses?\s+(?:a\s+|an\s+|the\s+)?([a-z][\w\s]{1,40}?)(?:\.|,|\s+and|\s+but|$)/gi, predicate: "uses", polarity: true },
+];
+
+/**
+ * テキストからSPOトリプレットを抽出。
+ * memvidの MemoryCard triplet extraction 相当。
+ */
+export function extractSPOTriples(text: string): SPOTriple[] {
+  const triples: SPOTriple[] = [];
+  const seen = new Set<string>();
+
+  for (const { pattern, predicate, polarity } of SPO_PATTERNS) {
+    pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) {
+      const subject = m[1]!.trim();
+      const object = m[2]!.trim();
+      const key = `${subject}|${predicate}|${object}|${polarity}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      triples.push({ subject, predicate, object, polarity, confidence: 0.8 });
+    }
+  }
+
+  return triples;
+}
+
+/**
+ * SPOクエリにマッチするトリプレットを検索。
+ * ? はワイルドカード（memvidの triple-pattern query 相当）。
+ *
+ * 例: { subject: "Aikata", predicate: "uses" } → Aikataが使うものを全検索
+ * 例: { predicate: "is_a", object: "AI agent" } → AIエージェントであるものを全検索
+ */
+export function querySPOTriples(
+  triples: SPOTriple[],
+  query: SPOQuery,
+): SPOTriple[] {
+  return triples.filter(t => {
+    if (query.subject && t.subject !== query.subject) return false;
+    if (query.predicate && t.predicate !== query.predicate) return false;
+    if (query.object && t.object !== query.object) return false;
+    return true;
+  });
+}
+
+/**
+ * トリプレット群からエンティティ関係グラフを構築。
+ * ノード=エンティティ、エッジ=predicate
+ */
+export function buildEntityGraph(triples: SPOTriple[]): {
+  nodes: string[];
+  edges: { from: string; to: string; predicate: string; polarity: boolean }[];
+} {
+  const nodeSet = new Set<string>();
+  const edges: { from: string; to: string; predicate: string; polarity: boolean }[] = [];
+
+  for (const t of triples) {
+    nodeSet.add(t.subject);
+    nodeSet.add(t.object);
+    edges.push({ from: t.subject, to: t.object, predicate: t.predicate, polarity: t.polarity });
+  }
+
+  return { nodes: [...nodeSet], edges };
+}
