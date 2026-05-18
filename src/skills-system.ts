@@ -21,6 +21,12 @@ export interface SkillDefinition {
   scripts: string[];
   references: string[];
   enabled: boolean;
+  /** アンチ合理化テーブル：AIがよく使う言い訳とその現実 */
+  rationalizations: { rationalization: string; reality: string }[];
+  /** 検証ゲート：スキル実行後の確認項目（全項目満たす必要あり） */
+  verification: string[];
+  /** レッドフラグ：危険シグナル（1つでも発火したら即時停止＝Stop The Line） */
+  redFlags: string[];
 }
 
 export interface SkillFile {
@@ -29,6 +35,15 @@ export interface SkillFile {
   type: "skill.md" | "agent.yaml" | "script" | "reference";
   content: string;
   loaded: boolean;
+}
+
+/** スキル実行の検証結果 */
+export interface ValidationResult {
+  passed: boolean;
+  failures: string[];
+  redFlagsTriggered: string[];
+  /** Stop The Line: レッドフラグ発火で即時停止が必要 */
+  stopTheLine: boolean;
 }
 
 // ==================== スキルシステム ====================
@@ -127,6 +142,9 @@ class SkillSystem {
       scripts: [],
       references: [],
       enabled: true,
+      rationalizations: [],
+      verification: [],
+      redFlags: [],
     };
 
     // YAML frontmatter解析
@@ -152,6 +170,15 @@ class SkillSystem {
           case "author": skill.author = value; break;
           case "triggers": skill.triggers = value.split(",").map((s) => s.trim()); break;
           case "tools": skill.tools = value.split(",").map((s) => s.trim()); break;
+          case "verification": skill.verification = value.split(",").map((s) => s.trim()); break;
+          case "redFlags": skill.redFlags = value.split(",").map((s) => s.trim()); break;
+          case "rationalizations":
+            try {
+              skill.rationalizations = JSON.parse(value);
+            } catch {
+              skill.rationalizations = [];
+            }
+            break;
         }
       }
 
@@ -159,6 +186,99 @@ class SkillSystem {
     }
 
     return skill;
+  }
+
+  // ==================== 検証・安全 ====================
+
+  /** スキル実行結果を検証（検証ゲート＋レッドフラグ） */
+  validateSkillExecution(name: string, output: string): ValidationResult {
+    const skill = this.skills.get(name);
+    const result: ValidationResult = {
+      passed: true,
+      failures: [],
+      redFlagsTriggered: [],
+      stopTheLine: false,
+    };
+
+    if (!skill) {
+      result.passed = false;
+      result.failures.push(`スキル "${name}" が見つかりません`);
+      return result;
+    }
+
+    // レッドフラグチェック（Stop The Line）
+    result.redFlagsTriggered = this.checkRedFlags(name, output);
+    if (result.redFlagsTriggered.length > 0) {
+      result.stopTheLine = true;
+      result.passed = false;
+      result.failures.push(
+        `🚨 Stop The Line: ${result.redFlagsTriggered.length}件のレッドフラグが発火しました`
+      );
+      logger.warn(
+        `[Skills] Stop The Line: "${name}" red flags: ${result.redFlagsTriggered.join(", ")}`
+      );
+      return result;
+    }
+
+    // 検証ゲートチェック
+    if (skill.verification.length > 0) {
+      const lowerOutput = output.toLowerCase();
+      for (const check of skill.verification) {
+        if (!lowerOutput.includes(check.toLowerCase())) {
+          result.passed = false;
+          result.failures.push(`検証未完了: "${check}"`);
+        }
+      }
+    }
+
+    if (!result.passed) {
+      logger.warn(
+        `[Skills] validation failed for "${name}": ${result.failures.join("; ")}`
+      );
+    }
+
+    return result;
+  }
+
+  /** レッドフラグをチェック（1つでもマッチしたら即時停止対象） */
+  checkRedFlags(name: string, output: string): string[] {
+    const skill = this.skills.get(name);
+    if (!skill || skill.redFlags.length === 0) return [];
+
+    const lowerOutput = output.toLowerCase();
+    return skill.redFlags.filter((flag) =>
+      lowerOutput.includes(flag.toLowerCase())
+    );
+  }
+
+  /** アンチ合理化コンテキストを生成（システムプロンプト注入用） */
+  getAntiRationalizationContext(skillName?: string): string {
+    const skills = skillName
+      ? [this.skills.get(skillName)].filter(Boolean) as SkillDefinition[]
+      : Array.from(this.skills.values());
+
+    const relevant = skills.filter((s) => s.rationalizations.length > 0);
+    if (relevant.length === 0) return "";
+
+    const parts: string[] = [];
+    for (const skill of relevant) {
+      const table = skill.rationalizations
+        .map(
+          (r) =>
+            `  ❌ 「${r.rationalization}」\n  ✅ 実際: ${r.reality}`
+        )
+        .join("\n");
+
+      parts.push(
+        `### ${skill.name}\n${table}`
+      );
+    }
+
+    return (
+      "⚠️ **アンチ合理化ガード**\n" +
+      "以下の言い訳パターンが検出された場合、それは誤った合理化です：\n\n" +
+      parts.join("\n\n")
+    );
   }
 
   // ---- 内部 ----
