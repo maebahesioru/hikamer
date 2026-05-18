@@ -13,6 +13,7 @@ import {
   type StatusBarSegment,
   type ProgressbarOptions,
 } from "./ansi-ui";
+import { goalSystem } from "./goal-system";
 
 // ==================== ANSI ショートカット ====================
 
@@ -224,6 +225,9 @@ export class UsageMonitor {
     const planStr = `${dim}${this.data.planName}${reset}`;
     const modelStr = `${magenta}${this.data.modelName}${reset}`;
 
+    // Goal System ステータスライン（アクティブ時のみ）
+    const goalStatusLine = goalSystem.renderStatusLine();
+
     // ステータスバーセグメントを組み立て
     const segments: StatusBarSegment[] = [
       { label: "SES", value: sessionBar, priority: 10 },
@@ -237,7 +241,13 @@ export class UsageMonitor {
       { label: "", value: planStr, priority: 90 },
     ];
 
-    return renderStatusBar(segments, " │ ");
+    const mainBar = renderStatusBar(segments, " │ ");
+
+    // ゴールがアクティブなら上にゴール行を追加
+    if (goalStatusLine) {
+      return goalStatusLine + "\n" + mainBar;
+    }
+    return mainBar;
   }
 
   /**

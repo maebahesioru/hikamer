@@ -12,6 +12,7 @@ import {
   saveMessages,
   logToolCall,
 } from "./repo";
+import { goalSystem, extractGoalContext } from "./goal-system";
 
 export interface AgentOptions {
   /** ストリーミング有効（デフォルトtrue） */
@@ -89,6 +90,21 @@ export async function agentLoop(
     ...pastHistory,
     { role: "user", content: userMessage },
   ];
+
+  // Goal System: アクティブなゴールがある場合、システムプロンプトにガイダンスを注入
+  if (goalSystem.isActive) {
+    const status = goalSystem.getStatus();
+    const goalGuidance = [
+      `\n## ⚠️ アクティブゴール`,
+      `以下の完了条件を達成するまで作業を継続してください：`,
+      `「${status.condition}」`,
+      `進捗: ${status.turnCount}/${status.maxTurns} ターン目`,
+    ];
+    if (status.lastEvaluation?.reason) {
+      goalGuidance.push(`前回の評価: ${status.lastEvaluation.reason}`);
+    }
+    messages[0]!.content += goalGuidance.join("\n");
+  }
 
   saveMessages(conversationId, [{ role: "user", content: userMessage }]);
 
@@ -295,6 +311,23 @@ export async function agentLoop(
           toolLogs,
           reasoning: allReasoning || undefined,
         };
+      }
+
+      // Goal System: 毎ターン後に達成判定
+      if (goalSystem.isActive) {
+        const goalContext = extractGoalContext(messages, 8000);
+        const evaluation = await goalSystem.evaluateGoal(goalContext, 1000);
+
+        if (!goalSystem.isActive) {
+          // 達成！ゴールが自動クリアされた
+          logger.info(`[Agent] 🎯 ゴール達成: ${evaluation.reason}`);
+          return {
+            response: `🎯 **ゴール達成！** ${evaluation.reason}\n\n${response.content || ""}`,
+            iterations,
+            toolLogs,
+            reasoning: allReasoning || undefined,
+          };
+        }
       }
 
     } catch (e: any) {
