@@ -1,6 +1,6 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.24: SocketManager + AudioToolkit + TreeSummarizer + TextInput + ToolTimeout
+// v1.25: RedirectLinks + MeetAgent + Runtime + WhatsApp + ShellHooks
 // ==========================================
 
 import "dotenv/config";
@@ -734,6 +734,35 @@ registerCommand("timeout", async () => {
   return toolTimeoutManager.formatStats();
 });
 
+// ==================== v1.25: 第24弾コマンド ====================
+
+registerCommand("redirect", async (args) => {
+  const { redirectManager } = await import("./redirect-links");
+  const sub = args?.toLowerCase();
+  if (sub === "stats") return redirectManager.formatStats();
+  return "🔗 **リダイレクト**\n/redirect stats — 統計";
+});
+
+registerCommand("meet-agent", async () => {
+  const { meetAgent } = await import("./meet-agent");
+  return meetAgent.formatStatus();
+});
+
+registerCommand("runtime", async () => {
+  const { runtimeManager } = await import("./runtime");
+  return runtimeManager.formatStatus();
+});
+
+registerCommand("whatsapp", async () => {
+  const { whatsappManager } = await import("./whatsapp");
+  return whatsappManager.formatStatus();
+});
+
+registerCommand("shell", async () => {
+  const { shellManager } = await import("./shell-hooks");
+  return shellManager.formatConfig();
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
@@ -798,8 +827,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.24 起動中…");
-  logger.info(" Socket / AudioToolkit / TreeSummarizer / TextInput / ToolTimeout");
+  logger.info(" Aikata v1.25 起動中…");
+  logger.info(" RedirectLinks / MeetAgent / Runtime / WhatsApp / ShellHooks");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
@@ -891,7 +920,7 @@ async function main() {
     logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
   }
 
-  logger.info(" /sockets /audio /summarize /timeout /text");
+  logger.info(" /redirect /meet-agent /runtime /whatsapp /shell");
   logger.info(` ツール数: ${toolRegistry.list().length} | モジュール数: 99+`);
 
   // サブコンシャス（環境変数ENABLE_SUBCONSCIOUS=true時）
