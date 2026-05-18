@@ -1,6 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.26: 最終弾 - Insights + Trajectory + WebViewAccounts + ProviderSurfaces + Misc
+// v1.27: COMPLETE - Curator + CredentialPool + AccountUsage + LSP + SkillSystem
+// 3リポジトリからの全抽出完了。全137+5=142ファイル
 // ==========================================
 
 import "dotenv/config";
@@ -791,6 +792,34 @@ registerCommand("surfaces", async () => {
 registerCommand("utils", async () => {
   const { formatMiscStatus } = await import("./aikata-misc");
   return formatMiscStatus();
+});
+
+// ==================== v1.27 COMPLETE コマンド ====================
+
+registerCommand("curator", async () => {
+  const { curator } = await import("./curator");
+  return curator.formatStats();
+});
+
+registerCommand("keys", async () => {
+  const { credentialPool } = await import("./credential-pool");
+  return credentialPool.formatStats();
+});
+
+registerCommand("usage", async () => {
+  const { accountUsage } = await import("./account-usage");
+  return accountUsage.formatStatus();
+});
+
+registerCommand("lsp", async () => {
+  const { lspManager } = await import("./lsp");
+  return lspManager.formatStatus();
+});
+
+registerCommand("skills", async (args) => {
+  const { skillSystem } = await import("./skills-system");
+  const category = args?.toLowerCase();
+  return skillSystem.formatSkills(category);
 });
 
 // ==================== メッセージプリプロセッサ ====================
