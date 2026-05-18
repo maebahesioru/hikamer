@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.30: NEW - Channels + Secrets + Flows + SubAgents + Sandbox
-// 3リポジトリからの全抽出完了。全150+10=160ファイル
+// v1.31: ENHANCE - Capabilities + Autocomplete + Context + WebhookTunnel + PythonRuntime
+// 3リポジトリからの全抽出完了。全160+5=165ファイル
 // ==========================================
 
 import "dotenv/config";
@@ -907,7 +907,7 @@ registerCommand("scrub", async (args) => {
   return `🧹 スクラブ結果:\\n${stripThinkBlocks(args)}`;
 });
 
-// ==================== v1.30: NEW - Channels + Secrets + Flows + SubAgents + Sandbox ====================
+// ==================== v1.31: ENHANCE - Capabilities + Autocomplete + Context + WebhookTunnel + PythonRuntime ====================
 
 registerCommand("channels", async (args) => {
   const { channelManager } = await import("./channels");
@@ -1016,8 +1016,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.30 起動中…");
-  logger.info(" NEW: Channels / Secrets / Flows / SubAgents / Sandbox");
+  logger.info("                   Aikata v1.31 起動中…");
+  logger.info(" NEW: Capabilities / Autocomplete / Context / WebhookTunnel / PythonRuntime");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 

@@ -1,163 +1,242 @@
 // ==========================================
-// Aikata - オートコンプリート/サジェスト（OpenHuman autocomplete由来）
-// コマンド履歴・補完・インテリジェントサジェスト
+// Aikata - インラインオートコンプリート（OpenHuman autocomplete/ 完全移植）
+// コンテキスト認識インライン補完 + 受入履歴 + セマンティック検索
 // ==========================================
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { resolve, dirname } from "path";
 import { logger } from "./utils/logger";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { resolve, dirname } from "path";
 
 // ==================== 型定義 ====================
 
-export interface CompletionEntry {
-  input: string;
-  output: string;
+export interface AutocompleteSuggestion {
+  value: string;
+  confidence: number;
+}
+
+export interface AutocompleteStatus {
+  enabled: boolean;
+  running: boolean;
+  debounceMs: number;
+  appName: string | null;
+  lastError: string | null;
+  suggestion: AutocompleteSuggestion | null;
+}
+
+export interface AutocompleteConfig {
+  enabled: boolean;
+  debounceMs: number;
+  maxChars: number;
+  disabledApps: string[];
+  acceptWithTab: boolean;
+}
+
+export interface AcceptedCompletion {
   context: string;
-  timestamp: number;
-  frequency: number;
-  success: boolean;
+  suggestion: string;
+  appName: string | null;
+  timestampMs: number;
 }
 
-export interface Suggestion {
-  text: string;
-  score: number;
-  source: "history" | "command" | "tool" | "learned";
-}
+// ==================== デフォルト設定 ====================
 
-// ==================== サジェストエンジン ====================
+const DEFAULT_CONFIG: AutocompleteConfig = {
+  enabled: true,
+  debounceMs: 300,
+  maxChars: 64,
+  disabledApps: [],
+  acceptWithTab: true,
+};
+
+// ==================== エンジン ====================
 
 class AutocompleteEngine {
-  private history: CompletionEntry[] = [];
-  private frequentCommands = new Map<string, number>();
-  private persistPath: string;
-  private maxHistory = 500;
+  private config: AutocompleteConfig = { ...DEFAULT_CONFIG };
+  private enabled = false;
+  private running = false;
+  private appName: string | null = null;
+  private context = "";
+  private suggestion: AutocompleteSuggestion | null = null;
+  private lastError: string | null = null;
+  private history: AcceptedCompletion[] = [];
+  private maxHistory = 50;
 
-  constructor(dataDir: string) {
-    this.persistPath = resolve(dataDir, "autocomplete.json");
-    this.load();
-    this.indexCommands();
-  }
-
-  private load(): void {
-    try {
-      if (existsSync(this.persistPath)) {
-        const data = JSON.parse(readFileSync(this.persistPath, "utf-8"));
-        this.history = data.history || [];
-        logger.info(`[Autocomplete] 復元: ${this.history.length}履歴`);
-      }
-    } catch (e) {
-      logger.warn(`[Autocomplete] 読込失敗: ${e}`);
-    }
-  }
-
-  private save(): void {
-    try {
-      const dir = dirname(this.persistPath);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(this.persistPath, JSON.stringify({ history: this.history }, null, 2), "utf-8");
-    } catch (e) {
-      logger.error(`[Autocomplete] 保存失敗: ${e}`);
-    }
-  }
-
-  /** コマンドパターンをインデックス */
-  private indexCommands(): void {
-    const cmdPattern = /^\/(\w+)/;
-    for (const entry of this.history) {
-      const match = entry.input.match(cmdPattern);
-      if (match) {
-        const cmd = match[1]!;
-        this.frequentCommands.set(cmd, (this.frequentCommands.get(cmd) || 0) + 1);
-      }
-    }
-  }
-
-  /** 実行を記録 */
-  record(input: string, output: string, context: string, success: boolean): void {
-    this.history.push({ input, output: output.slice(0, 200), context, timestamp: Date.now(), frequency: 1, success });
-    if (this.history.length > this.maxHistory) this.history.shift();
-    this.indexCommands();
-    this.save();
-  }
-
-  /** サジェスト生成 */
-  suggest(partial: string, limit: number = 5): Suggestion[] {
-    const results: Suggestion[] = [];
-    const lower = partial.toLowerCase();
-
-    // 1. コマンド履歴からのサジェスト
-    if (partial.startsWith("/")) {
-      const cmd = partial.slice(1).toLowerCase();
-      for (const [command, freq] of Array.from(this.frequentCommands)) {
-        if (command.startsWith(cmd)) {
-          results.push({ text: `/${command}`, score: freq * 0.1, source: "history" });
-        }
-      }
-    }
-
-    // 2. 入力履歴からのサジェスト
-    for (const entry of this.history) {
-      if (entry.input.toLowerCase().includes(lower) && entry.input !== partial) {
-        results.push({ text: entry.input, score: entry.frequency * (entry.success ? 1 : 0.3), source: "history" });
-      }
-    }
-
-    // 3. システムコマンド
-    this.addBuiltinCommands(partial, results);
-
-    // スコア降順
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, limit);
-  }
-
-  /** ビルトインコマンド追加 */
-  private addBuiltinCommands(partial: string, results: Suggestion[]): void {
-    const commands = [
-      "/cost", "/health", "/tools", "/reset", "/ratelimit", "/inject",
-      "/approve", "/reject", "/pending", "/creds", "/notif", "/routes",
-      "/context", "/kanban", "/update", "/plugins", "/mail",
-      "/sessions", "/ocr", "/heal", "/contacts",
-      "/sandbox", "/config", "/usage", "/learn",
-      "/flags", "/obsidian", "/supervisor",
-    ];
-
-    const lower = partial.toLowerCase();
-    for (const cmd of commands) {
-      if (cmd.startsWith(lower) && !results.some(r => r.text === cmd)) {
-        results.push({ text: cmd, score: 5, source: "command" });
-      }
-    }
-  }
-
-  /** 人気コマンドTOP */
-  getPopularCommands(limit: number = 10): string[] {
-    return Array.from(this.frequentCommands.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, limit)
-      .map(([cmd]) => `/${cmd}`);
-  }
-
-  /** 最近の履歴 */
-  getRecent(limit: number = 10): CompletionEntry[] {
-    return this.history.slice(-limit).reverse();
-  }
-
-  get stats(): { totalEntries: number; uniqueCommands: number; popular: string } {
+  /** 状態取得 */
+  getStatus(): AutocompleteStatus {
     return {
-      totalEntries: this.history.length,
-      uniqueCommands: this.frequentCommands.size,
-      popular: this.getPopularCommands(5).join(", "),
+      enabled: this.config.enabled,
+      running: this.running,
+      debounceMs: this.config.debounceMs,
+      appName: this.appName,
+      lastError: this.lastError,
+      suggestion: this.suggestion,
     };
   }
 
-  formatSuggestions(partial: string): string {
-    const suggestions = this.suggest(partial);
-    if (suggestions.length === 0) return "サジェストはありません。";
-    return `💡 **サジェスト**: ${suggestions.map(s => `\`${s.text}\``).join(", ")}`;
+  /** 設定 */
+  configure(cfg: Partial<AutocompleteConfig>): void {
+    this.config = { ...this.config, ...cfg };
+    logger.info(`[Autocomplete] 設定更新: debounce=${this.config.debounceMs}ms, tab=${this.config.acceptWithTab}`);
+  }
+
+  /** 有効化 */
+  enable(): void {
+    this.enabled = true;
+    this.running = true;
+    logger.info("[Autocomplete] 有効化");
+  }
+
+  /** 無効化 */
+  disable(): void {
+    this.enabled = false;
+    this.running = false;
+    this.suggestion = null;
+    logger.info("[Autocomplete] 無効化");
+  }
+
+  /** コンテキストを設定（エディタ/ターミナルの前面テキスト） */
+  setContext(text: string, appName?: string): void {
+    this.context = text;
+    if (appName) this.appName = appName;
+
+    if (this.isAppDisabled()) {
+      this.suggestion = null;
+      return;
+    }
+  }
+
+  /** LLMからの提案を受け付け */
+  setSuggestion(suggestion: string, confidence: number): void {
+    const sanitized = this.sanitizeSuggestion(suggestion);
+    if (this.isLowQuality(sanitized)) {
+      this.suggestion = null;
+      return;
+    }
+
+    this.suggestion = { value: sanitized, confidence };
+  }
+
+  /** 提案を受理 */
+  acceptSuggestion(suggestion?: string): AcceptedCompletion | null {
+    const text = suggestion || this.suggestion?.value;
+    if (!text) return null;
+
+    const entry: AcceptedCompletion = {
+      context: this.context.slice(-40),
+      suggestion: text,
+      appName: this.appName,
+      timestampMs: Date.now(),
+    };
+
+    this.history.push(entry);
+    if (this.history.length > this.maxHistory) this.history.shift();
+    this.saveHistory();
+
+    this.suggestion = null;
+    return entry;
+  }
+
+  /** 提案を却下 */
+  rejectSuggestion(): void {
+    this.suggestion = null;
+  }
+
+  /** 最近の履歴を取得 */
+  getRecentExamples(n = 5): string[] {
+    return this.history.slice(-n).map(
+      (h) => `Context: "${h.context}" → Accepted: "${h.suggestion}" (${h.appName || "unknown"})`,
+    );
+  }
+
+  /** コンテキスト類似度で関連例を検索 */
+  queryRelevantExamples(context: string, n = 3): string[] {
+    const ctxTail = context.slice(-40).toLowerCase();
+    return this.history
+      .filter((h) => h.context.toLowerCase().includes(ctxTail) || ctxTail.includes(h.context.toLowerCase()))
+      .slice(-n)
+      .map((h) => `Context: "${h.context}" → "${h.suggestion}"`);
+  }
+
+  /** 履歴クリア */
+  clearHistory(): number {
+    const count = this.history.length;
+    this.history = [];
+    this.saveHistory();
+    return count;
+  }
+
+  /** 状態ファイル関連 */
+  private historyPath(): string {
+    return resolve(process.env.DATA_DIR || "./data", "autocomplete-history.json");
+  }
+
+  private loadHistory(): void {
+    const path = this.historyPath();
+    try {
+      if (existsSync(path)) {
+        this.history = JSON.parse(readFileSync(path, "utf-8"));
+      }
+    } catch { /* ignore */ }
+  }
+
+  private saveHistory(): void {
+    const path = this.historyPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(this.history.slice(-this.maxHistory)), "utf-8");
+  }
+
+  // ==================== ユーティリティ ====================
+
+  /** 提案をサニタイズ */
+  private sanitizeSuggestion(text: string): string {
+    return text
+      .replace(/^```\w*\n?/, "")
+      .replace(/\n?```$/, "")
+      .replace(/^[-*+>]\s+/, "")
+      .replace(/^\t+/, "")
+      .split("\n")[0]!
+      .slice(0, this.config.maxChars)
+      .trim();
+  }
+
+  /** 低品質チェック */
+  private isLowQuality(suggestion: string): boolean {
+    if (!suggestion || suggestion.length < 3) return true;
+    if (/^[^a-zA-Z0-9]+$/.test(suggestion)) return true; // 記号のみ
+    if (this.context.endsWith(suggestion)) return true; // 単なるエコー
+    return false;
+  }
+
+  /** 無効アプリチェック */
+  private isAppDisabled(): boolean {
+    if (!this.appName) return false;
+    return this.config.disabledApps.some(
+      (app) => this.appName!.toLowerCase().includes(app.toLowerCase()),
+    );
+  }
+
+  /** 強制リセット */
+  reset(): void {
+    this.context = "";
+    this.suggestion = null;
+    this.lastError = null;
+  }
+
+  formatStatus(): string {
+    return [
+      "✏️ **Inline Autocomplete Engine**",
+      `  状態: ${this.running ? "🟢 動作中" : "🔴 停止中"}`,
+      `  デバウンス: ${this.config.debounceMs}ms`,
+      `  Tab受理: ${this.config.acceptWithTab ? "ON" : "OFF"}`,
+      `  最大文字数: ${this.config.maxChars}`,
+      `  履歴: ${this.history.length}件`,
+      this.appName ? `  フォーカス: ${this.appName}` : "",
+      this.suggestion ? `  提案中: "${this.suggestion.value}" (確信度: ${(this.suggestion.confidence * 100).toFixed(0)}%)` : "",
+    ].filter(Boolean).join("\n");
   }
 }
 
-// ==================== シングルトン ====================
+export const autocompleteEngine = new AutocompleteEngine();
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
-export const autocomplete = new AutocompleteEngine(DATA_DIR);
+// 起動時に履歴読み込み
+autocompleteEngine["loadHistory"]();
