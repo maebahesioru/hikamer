@@ -1,7 +1,7 @@
 // ==========================================
 // Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
-// v1.31: ENHANCE - Capabilities + Autocomplete + Context + WebhookTunnel + PythonRuntime
-// 3リポジトリからの全抽出完了。全160+5=165ファイル
+// v1.32: UTILITIES - net-utils + text-utils + retry-utils + SSRF + logger強化
+// 3リポジトリからの全ユーティリティパターン抽出完了。全165+3=168ファイル
 // ==========================================
 
 import "dotenv/config";
@@ -1016,8 +1016,8 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info("                   Aikata v1.31 起動中…");
-  logger.info(" NEW: Capabilities / Autocomplete / Context / WebhookTunnel / PythonRuntime");
+  logger.info(" Aikata v1.32 起動中…");
+  logger.info(" UTILITIES: net-utils / text-utils / retry-utils");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
 
