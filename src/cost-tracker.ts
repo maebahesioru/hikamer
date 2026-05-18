@@ -225,6 +225,9 @@ export function recordCost(
 
   _entries.push(entry);
 
+  // Burn rate tracking (claude-pulse deep pattern)
+  burnRateTracker.recordCost(costs.totalCost);
+
   // サマリ更新
   const summary = loadSummary();
   summary.totalCalls++;
@@ -500,3 +503,214 @@ export function formatBudgetStatus(): string {
 
   return lines.join("\n");
 }
+
+// ==================== CumulativeCostTracker（claude-pulse deep patterns） ====================
+
+interface CumulativeCostData {
+  total: number;
+  byModel: Record<string, number>;
+  byDay: Record<string, number>;
+  byWeek: Record<string, number>;
+}
+
+class CumulativeCostTracker {
+  private cache: CumulativeCostData | null = null;
+  private cacheTime = 0;
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5分キャッシュ
+
+  /**
+   * data/cost*.jsonl を全スキャンし、モデル別・日別・週別に集計。
+   * 結果は5分間キャッシュされる。
+   */
+  getCumulativeCost(): CumulativeCostData {
+    const now = Date.now();
+    if (this.cache && (now - this.cacheTime) < this.CACHE_TTL) {
+      return this.cache;
+    }
+
+    const dataDir = resolve(process.env.DATA_DIR || "./data");
+    const result: CumulativeCostData = {
+      total: 0,
+      byModel: {},
+      byDay: {},
+      byWeek: {},
+    };
+
+    try {
+      const fs = require("fs");
+      if (!existsSync(dataDir)) {
+        this.cache = result;
+        this.cacheTime = now;
+        return result;
+      }
+
+      const files: string[] = fs.readdirSync(dataDir).filter(
+        (f: string) => f.startsWith("cost") && f.endsWith(".jsonl")
+      );
+
+      for (const file of files) {
+        const content = readFileSync(resolve(dataDir, file), "utf-8");
+        const lines = content.split("\n").filter((l: string) => l.trim().length > 0);
+        for (const line of lines) {
+          try {
+            const record = JSON.parse(line);
+            const cost: number =
+              typeof record.cost === "number" ? record.cost
+              : typeof record.totalCost === "number" ? record.totalCost
+              : 0;
+            const model: string =
+              typeof record.model === "string" ? record.model : "unknown";
+            const ts: string =
+              typeof record.timestamp === "string" ? record.timestamp : "";
+
+            result.total += cost;
+
+            const prevModel = result.byModel[model] ?? 0;
+            result.byModel[model] = prevModel + cost;
+
+            if (ts.length >= 10) {
+              const day = ts.slice(0, 10);
+              const prevDay = result.byDay[day] ?? 0;
+              result.byDay[day] = prevDay + cost;
+
+              // ISO週（日曜起点）
+              const d = new Date(ts);
+              if (!isNaN(d.getTime())) {
+                const dayOfWeek = d.getDay();
+                const weekStart = new Date(d);
+                weekStart.setDate(d.getDate() - dayOfWeek);
+                const weekKey = weekStart.toISOString().slice(0, 10);
+                const prevWeek = result.byWeek[weekKey] ?? 0;
+                result.byWeek[weekKey] = prevWeek + cost;
+              }
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(`[CumulativeCostTracker] スキャン失敗: ${e}`);
+    }
+
+    // 丸め
+    result.total = round(result.total);
+    for (const k of Object.keys(result.byModel)) {
+      const v = result.byModel[k];
+      if (v !== undefined) result.byModel[k] = round(v);
+    }
+    for (const k of Object.keys(result.byDay)) {
+      const v = result.byDay[k];
+      if (v !== undefined) result.byDay[k] = round(v);
+    }
+    for (const k of Object.keys(result.byWeek)) {
+      const v = result.byWeek[k];
+      if (v !== undefined) result.byWeek[k] = round(v);
+    }
+
+    this.cache = result;
+    this.cacheTime = now;
+    return result;
+  }
+
+  /** キャッシュを無効化 */
+  invalidateCache(): void {
+    this.cache = null;
+    this.cacheTime = 0;
+  }
+}
+
+// ==================== BurnRateTracker（claude-pulse deep patterns） ====================
+
+interface BurnRecord {
+  timestamp: number;
+  cost: number;
+}
+
+interface BurnRate {
+  hourlyRate: number;
+  dailyProjection: number;
+  weeklyProjection: number;
+  trend: "rising" | "stable" | "falling";
+}
+
+class BurnRateTracker {
+  private window: BurnRecord[] = [];
+  private readonly WINDOW_MS = 5 * 60 * 1000; // 5分スライディングウィンドウ
+  private lastWindowCost = 0;
+
+  /** コストエントリを記録 */
+  recordCost(cost: number): void {
+    const now = Date.now();
+    this.window.push({ timestamp: now, cost });
+    this.prune(now);
+  }
+
+  /**
+   * 現在のバーンレートを取得。
+   * 5分ウィンドウ内のコスト速度から時給・日次・週次を投影。
+   */
+  getBurnRate(): BurnRate {
+    const now = Date.now();
+    this.prune(now);
+
+    const hourlyRate = this.computeHourlyRate();
+    const dailyProjection = hourlyRate * 24;
+    const weeklyProjection = dailyProjection * 7;
+
+    // トレンド判定（前回ウィンドウ総コストとの比較）
+    const currentWindowCost = this.window.reduce((s, r) => s + r.cost, 0);
+    let trend: BurnRate["trend"] = "stable";
+    if (this.lastWindowCost > 0 && currentWindowCost !== this.lastWindowCost) {
+      const diff = currentWindowCost - this.lastWindowCost;
+      const pct = diff / this.lastWindowCost;
+      if (pct > 0.05) trend = "rising";
+      else if (pct < -0.05) trend = "falling";
+    }
+    this.lastWindowCost = currentWindowCost;
+
+    return {
+      hourlyRate: round(hourlyRate),
+      dailyProjection: round(dailyProjection),
+      weeklyProjection: round(weeklyProjection),
+      trend,
+    };
+  }
+
+  /** 表示用フォーマット: ↑$0.42/hr または ↓$0.12/hr */
+  formatBurnRate(): string {
+    const rate = this.getBurnRate();
+    const arrow =
+      rate.trend === "rising" ? "↑"
+      : rate.trend === "falling" ? "↓"
+      : "→";
+    return `${arrow}$${rate.hourlyRate.toFixed(2)}/hr`;
+  }
+
+  private prune(now: number): void {
+    const cutoff = now - this.WINDOW_MS;
+    let writeIdx = 0;
+    for (let i = 0; i < this.window.length; i++) {
+      const r = this.window[i]!;
+      if (r.timestamp >= cutoff) {
+        this.window[writeIdx++] = r;
+      }
+    }
+    this.window.length = writeIdx;
+  }
+
+  private computeHourlyRate(): number {
+    if (this.window.length < 2) return 0;
+    const first = this.window[0]!;
+    const last = this.window[this.window.length - 1]!;
+    const timeSpanHours = (last.timestamp - first.timestamp) / (1000 * 60 * 60);
+    if (timeSpanHours <= 0) return 0;
+    const totalCost = this.window.reduce((s, r) => s + r.cost, 0);
+    return totalCost / timeSpanHours;
+  }
+}
+
+// ==================== シングルトン ====================
+
+export const cumulativeCostTracker = new CumulativeCostTracker();
+export const burnRateTracker = new BurnRateTracker();

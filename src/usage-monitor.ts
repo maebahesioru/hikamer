@@ -5,7 +5,7 @@
 // ==========================================
 
 import { logger } from "./utils/logger";
-import { getCostSummary, getSessionCost } from "./cost-tracker";
+import { getCostSummary, getSessionCost, burnRateTracker, cumulativeCostTracker } from "./cost-tracker";
 import {
   renderProgressBar,
   renderStatusBar,
@@ -74,6 +74,10 @@ export interface UsageMonitorConfig {
   spinnerFrames: string[];
   /** セッションID（cost-tracker連携用） */
   sessionId?: string;
+  /** バーンレート表示（↑$0.42/hr）を有効にする */
+  showBurnRate?: boolean;
+  /** 累積コスト表示を有効にする */
+  showCumulativeCost?: boolean;
 }
 
 const DEFAULT_CONFIG: UsageMonitorConfig = {
@@ -86,7 +90,102 @@ const DEFAULT_CONFIG: UsageMonitorConfig = {
   barStyle: "block",
   spinnerFrames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
   sessionId: undefined,
+  showBurnRate: true,
+  showCumulativeCost: false,
 };
+
+// ==================== フォーカスタイマー（claude-pulse deep pattern: Pomodoro） ====================
+
+export interface FocusTimerState {
+  running: boolean;
+  remaining: number;      // 残り秒数
+  total: number;          // 設定時間（秒）
+  isWork: boolean;        // 作業中か休憩中か
+  startedAt: number;      // 開始エポックms
+}
+
+const FOCUS_WORK_SECS = 25 * 60;   // 25分
+const FOCUS_BREAK_SECS = 5 * 60;   // 5分
+
+export class FocusTimer {
+  private state: FocusTimerState = {
+    running: false,
+    remaining: FOCUS_WORK_SECS,
+    total: FOCUS_WORK_SECS,
+    isWork: true,
+    startedAt: 0,
+  };
+  private intervalId?: ReturnType<typeof setInterval>;
+  private onTick?: (state: FocusTimerState) => void;
+  private onComplete?: (state: FocusTimerState) => void;
+
+  /** 作業タイマーを開始 */
+  start(seconds?: number, callbacks?: {
+    onTick?: (s: FocusTimerState) => void;
+    onComplete?: (s: FocusTimerState) => void;
+  }): void {
+    if (this.state.running) return;
+    const dur = seconds ?? FOCUS_WORK_SECS;
+    this.state = {
+      running: true,
+      remaining: dur,
+      total: dur,
+      isWork: dur === FOCUS_WORK_SECS,
+      startedAt: Date.now(),
+    };
+    this.onTick = callbacks?.onTick;
+    this.onComplete = callbacks?.onComplete;
+
+    this.intervalId = setInterval(() => {
+      this.state.remaining = Math.max(0, this.state.remaining - 1);
+      this.onTick?.(this.getState());
+
+      if (this.state.remaining <= 0) {
+        this.stop();
+        this.onComplete?.(this.getState());
+      }
+    }, 1000);
+  }
+
+  /** タイマーを停止 */
+  stop(): void {
+    if (this.intervalId) clearInterval(this.intervalId);
+    this.state.running = false;
+    this.intervalId = undefined;
+  }
+
+  /** タイマーをリセット */
+  reset(seconds?: number): void {
+    this.stop();
+    this.state = {
+      running: false,
+      remaining: seconds ?? FOCUS_WORK_SECS,
+      total: seconds ?? FOCUS_WORK_SECS,
+      isWork: (seconds ?? FOCUS_WORK_SECS) === FOCUS_WORK_SECS,
+      startedAt: 0,
+    };
+  }
+
+  /** 現在の状態を取得 */
+  getState(): FocusTimerState {
+    return { ...this.state };
+  }
+
+  /** ステータス表示用: ⏱ 24:59 [WORK] */
+  render(): string {
+    if (!this.state.running) return "";
+    const m = Math.floor(this.state.remaining / 60);
+    const s = this.state.remaining % 60;
+    const label = this.state.isWork ? "⏱ WORK" : "☕ BREAK";
+    const pct = this.state.total > 0
+      ? Math.round((1 - this.state.remaining / this.state.total) * 100)
+      : 0;
+    const bar = "█".repeat(Math.floor(pct / 5)) + "░".repeat(20 - Math.floor(pct / 5));
+    return `${label} ${bar} ${m}:${s.toString().padStart(2, "0")}`;
+  }
+}
+
+export const focusTimer = new FocusTimer();
 
 // ==================== UsageMonitor クラス ====================
 
@@ -206,6 +305,19 @@ export class UsageMonitor {
     // --- コスト ---
     const costStr = `${bold}$${this.data.cost.toFixed(4)}${reset}`;
 
+    // --- バーンレート（claude-pulse deep pattern: ↑$0.42/hr） ---
+    let burnStr = "";
+    if (this.config.showBurnRate) {
+      burnStr = burnRateTracker.formatBurnRate();
+    }
+
+    // --- 累積コスト（claude-pulse deep pattern） ---
+    let cumCostStr = "";
+    if (this.config.showCumulativeCost) {
+      const cum = cumulativeCostTracker.getCumulativeCost();
+      cumCostStr = `${bold}Σ$${cum.total.toFixed(2)}${reset}`;
+    }
+
     // --- ツールカウント + スピナー ---
     const spinner = this.config.spinnerFrames[this.spinnerIdx];
     const toolStr = `${spinner} ${cyan}${this.data.toolCount}${reset} tools`;
@@ -234,6 +346,8 @@ export class UsageMonitor {
       { label: "WK", value: weeklyBar, priority: 20 },
       { label: "CTX", value: ctxStr, priority: 30 },
       { label: "", value: costStr, priority: 40 },
+      ...(burnStr ? [{ label: "BRN", value: burnStr, priority: 42 }] : []),
+      ...(cumCostStr ? [{ label: "CUM", value: cumCostStr, priority: 44 }] : []),
       { label: "", value: toolStr, priority: 50 },
       { label: "", value: timeStr, priority: 60 },
       { label: "", value: peakStr, priority: 70 },

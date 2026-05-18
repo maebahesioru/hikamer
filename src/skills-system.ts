@@ -46,6 +46,13 @@ export interface ValidationResult {
   stopTheLine: boolean;
 }
 
+/** Chesterton's Fenceによるコード削除の品質チェック結果 */
+export interface QualityCheckResult {
+  safe: boolean;
+  questions: string[];
+  recommendation: string;
+}
+
 // ==================== スキルシステム ====================
 
 class SkillSystem {
@@ -64,8 +71,139 @@ class SkillSystem {
     if (this.initialized) return;
     this.skillDirs.push(...this.DEFAULT_SKILL_DIRS);
     this.discoverSkills();
+    this.registerBuiltinSkills();
     this.initialized = true;
     logger.info(`[Skills] initialized: ${this.skills.size} skills`);
+  }
+
+  /** 組み込みスキルを自動登録（doubt-driven-development, chestertons-fence） */
+  private registerBuiltinSkills(): void {
+    // ── doubt-driven-development ──
+    this.registerSkill({
+      name: "doubt-driven-development",
+      description:
+        "CLAIM→EXTRACT→DOUBT→RECONCILE→STOP: adversarially challenge every claim before acting",
+      category: "safety",
+      version: "1.0.0",
+      author: "Aikata",
+      triggers: [
+        "doubt", "verify", "double-check", "skeptical",
+        "challenge assumption", "fact check",
+      ],
+      tools: [],
+      prompt: `You are in DOUBT-DRIVEN DEVELOPMENT mode. Follow this process strictly:
+
+## Process
+1. **CLAIM** – State what you're about to do or what you believe to be true.
+2. **EXTRACT** – Find the evidence. Where did this claim come from? Code, docs, tests, or assumption?
+3. **DOUBT** – Adversarially challenge every claim. Assume it's wrong and try to prove it.
+4. **RECONCILE** – Resolve any doubts found. Can you verify the claim with independent evidence?
+5. **STOP** – If any doubt remains unresolved, escalate to human. Do NOT proceed with uncertainty.
+
+## Critical Rules
+- Never accept your own output as ground truth.
+- Evidence must be verifiable and independent, not self-referential.
+- If you cannot find evidence for a claim, mark it UNVERIFIED.
+- Small errors compound catastrophically in agentic loops — doubt even the trivial.`,
+      scripts: [],
+      references: [],
+      enabled: true,
+      rationalizations: [
+        {
+          rationalization: "It's probably fine",
+          reality: "Probability is not verification. Either it IS verified or it is NOT.",
+        },
+        {
+          rationalization: "This is too small to doubt",
+          reality: "Small errors compound catastrophically in agentic loops.",
+        },
+        {
+          rationalization: "I already checked that",
+          reality: "Self-verification is not verification. Independent evidence required.",
+        },
+        {
+          rationalization: "The tests pass so it's correct",
+          reality: "Tests passing means tests pass. It does not mean correctness for all inputs.",
+        },
+      ],
+      verification: [
+        "All claims have cited evidence",
+        "Doubt phase completed before action",
+        "Unresolved doubts escalated to human",
+      ],
+      redFlags: [
+        "confidence without evidence",
+        "skipping doubt phase",
+        "accepting own output as ground truth",
+        "proceeding without verification",
+        "rationalizing away a concern",
+      ],
+    });
+
+    // ── chestertons-fence ──
+    this.registerSkill({
+      name: "chestertons-fence",
+      description:
+        "Chesterton's Fence: answer 6 questions before removing/modifying existing code. Never remove what you don't understand.",
+      category: "safety",
+      version: "1.0.0",
+      author: "Aikata",
+      triggers: [
+        "refactor", "remove", "delete", "clean up", "simplify",
+        "modernize", "rewrite", "deprecate", "get rid of",
+      ],
+      tools: [],
+      prompt: `You are at CHESTERTON'S FENCE. Before removing or modifying any existing code, structure, or pattern, answer these 6 questions:
+
+## The 6 Questions
+1. **Why was this built?** – What was the original purpose?
+2. **What problem did it solve?** – What specific issue did it address?
+3. **Is that problem still real?** – Has the underlying need actually disappeared?
+4. **What depends on this?** – Direct callers, indirect consumers, configs, docs, external systems.
+5. **Could the apparent inefficiency be intentional?** – Performance tradeoffs, edge-case handling, backward compatibility.
+6. **What's the blast radius?** – If removal goes wrong, what breaks? How fast can you detect it?
+
+## Rules
+- Apparent unnecessary complexity often hides real constraints you have not yet discovered.
+- If there are no tests for what you're about to change, **add tests first**.
+- If you cannot answer all 6 questions, **STOP and research** before touching anything.
+- Document your answers before making changes.`,
+      scripts: [],
+      references: [],
+      enabled: true,
+      rationalizations: [
+        {
+          rationalization: "This looks unnecessary",
+          reality: "Apparent unnecessary complexity often hides real constraints. Complexity is a signal, not always waste.",
+        },
+        {
+          rationalization: "I'll refactor it",
+          reality: "Refactor only if tests exist for the current behavior. If tests are missing, add them first.",
+        },
+        {
+          rationalization: "Nobody uses this anymore",
+          reality: "Assume nothing. Verify with actual usage data, git blame, and dependency analysis.",
+        },
+        {
+          rationalization: "I can always revert if it breaks",
+          reality: "Reverting after production breakage is not acceptable. Verify before, not after.",
+        },
+      ],
+      verification: [
+        "All 6 questions answered with evidence",
+        "Blast radius documented",
+        "Tests exist for current behavior",
+        "Dependencies analyzed",
+      ],
+      redFlags: [
+        "removing code without understanding it",
+        "assuming something is unused without verification",
+        "refactoring without test coverage",
+        "dismissing complexity as unnecessary",
+      ],
+    });
+
+    logger.info("[Skills] registered 2 built-in safety skills (doubt-driven-development, chestertons-fence)");
   }
 
   /** スキルを発見 */
@@ -249,6 +387,49 @@ class SkillSystem {
     return skill.redFlags.filter((flag) =>
       lowerOutput.includes(flag.toLowerCase())
     );
+  }
+
+  /** Chesterton's Fenceによるコード削除前の品質チェック */
+  qualityCheckCodeRemoval(target: string, reason: string): QualityCheckResult {
+    const questions: string[] = [
+      `Why was "${target}" built? What was its original purpose?`,
+      `What problem did "${target}" solve?`,
+      `Is that problem still real? (Stated reason: "${reason}")`,
+      `What depends on "${target}"? (direct callers, indirect consumers, configs, docs, external systems)`,
+      `Could the apparent inefficiency in "${target}" be intentional?`,
+      `What's the blast radius if removal of "${target}" goes wrong?`,
+    ];
+
+    // ヒューリスティック: 理由に不確実な表現が含まれていないか
+    const reasonLower = reason.toLowerCase();
+    const redFlags: string[] = [];
+
+    const uncertaintyPatterns = [
+      { pattern: "probably", msg: "Reason contains 'probably' — verify with evidence, not probability." },
+      { pattern: "seems", msg: "Reason contains 'seems' — impressions are not verification." },
+      { pattern: "looks like", msg: "Reason contains 'looks like' — appearances can be deceiving." },
+      { pattern: "maybe", msg: "Reason contains 'maybe' — uncertainty is a red flag for code removal." },
+      { pattern: "i think", msg: "Reason contains 'I think' — verify with data, not hunches." },
+      { pattern: "just", msg: "Reason minimizes complexity with 'just'. Apparent simplicity may hide real constraints." },
+      { pattern: "simply", msg: "Reason minimizes complexity with 'simply'. Chesterton's Fence: understand before removing." },
+      { pattern: "easy", msg: "Reason calls this 'easy'. Easy to remove does not mean safe to remove." },
+    ];
+
+    for (const { pattern, msg } of uncertaintyPatterns) {
+      if (reasonLower.includes(pattern)) {
+        redFlags.push(msg);
+      }
+    }
+
+    const safe = redFlags.length === 0;
+
+    const recommendation = safe
+      ? `Proceed with caution. Answer all 6 Chesterton's Fence questions before touching "${target}". ` +
+        `Verify dependencies and add tests for current behavior first.`
+      : `⚠️ STOP: ${redFlags.join(" ")} ` +
+        `Research "${target}" thoroughly before removal. The stated reason may rationalize away real complexity.`;
+
+    return { safe, questions, recommendation };
   }
 
   /** アンチ合理化コンテキストを生成（システムプロンプト注入用） */
