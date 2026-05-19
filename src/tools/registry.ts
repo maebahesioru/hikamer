@@ -138,3 +138,44 @@ class ToolRegistry {
 }
 
 export const toolRegistry = new ToolRegistry();
+
+// ==========================================
+// ツール自動検出（hermes-agent AST-based discovery パターン）
+// tools/ ディレクトリ内の全.tsファイルを動的インポートし
+// register()済みツールを自動検出
+// ==========================================
+
+/**
+ * 指定ディレクトリから全ツールモジュールを動的インポート。
+ * hermes-agentの `tools/__init__.py` の全import戦略に相当。
+ * 
+ * 使用例:
+ *   await discoverTools("./tools");
+ */
+export async function discoverTools(dir: string): Promise<string[]> {
+  const { readdirSync } = await import("fs");
+  const { resolve, extname } = await import("path");
+  const discovered: string[] = [];
+
+  try {
+    const files = readdirSync(dir).filter(f =>
+      extname(f) === ".ts" && !f.startsWith(".") && f !== "registry.ts"
+    );
+
+    for (const file of files) {
+      try {
+        const modulePath = resolve(dir, file);
+        await import(modulePath);
+        discovered.push(file);
+      } catch (err) {
+        logger.warn(`[ToolDiscovery] インポート失敗 ${file}: ${err}`);
+      }
+    }
+
+    logger.info(`[ToolDiscovery] ${discovered.length}モジュール読込完了: ${discovered.join(", ").slice(0, 120)}`);
+  } catch (err) {
+    logger.error(`[ToolDiscovery] ディレクトリ読込失敗: ${err}`);
+  }
+
+  return discovered;
+}

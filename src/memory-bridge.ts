@@ -657,3 +657,79 @@ export function buildEntityGraph(triples: SPOTriple[]): {
 
   return { nodes: [...nodeSet], edges };
 }
+
+// ==========================================
+// メモリライフサイクルフック（hermes-agent MemoryProvider パターン）
+// prefetch / sync_turn / on_turn_start / on_delegation 等の
+// ライフサイクルにフックするイベントシステム
+// ==========================================
+
+export type MemoryHookEvent =
+  | "prefetch"        // コンテキスト注入前の先読み
+  | "sync_turn"       // 各ターン終了後の同期
+  | "on_turn_start"   // ターン開始時の準備
+  | "on_delegation"   // サブエージェント委任時
+  | "on_shutdown";    // シャットダウン時
+
+export type MemoryHook = (context: {
+  event: MemoryHookEvent;
+  conversationId?: string;
+  metadata?: Record<string, unknown>;
+}) => Promise<void> | void;
+
+class MemoryLifecycle {
+  private hooks = new Map<MemoryHookEvent, MemoryHook[]>();
+  private externalProviderCount = 0;
+  private readonly MAX_EXTERNAL_PROVIDERS = 1;
+
+  /** フックを登録 */
+  on(event: MemoryHookEvent, hook: MemoryHook): void {
+    if (!this.hooks.has(event)) this.hooks.set(event, []);
+    this.hooks.get(event)!.push(hook);
+  }
+
+  /** フックを削除 */
+  off(event: MemoryHookEvent, hook: MemoryHook): void {
+    const hooks = this.hooks.get(event);
+    if (!hooks) return;
+    const idx = hooks.indexOf(hook);
+    if (idx >= 0) hooks.splice(idx, 1);
+  }
+
+  /** フックを発火 */
+  async emit(event: MemoryHookEvent, context: {
+    conversationId?: string;
+    metadata?: Record<string, unknown>;
+  } = {}): Promise<void> {
+    const hooks = this.hooks.get(event);
+    if (!hooks || hooks.length === 0) return;
+
+    for (const hook of hooks) {
+      try {
+        await hook({ event, ...context });
+      } catch (err) {
+        logger.warn(`[MemoryLifecycle] ${event} hook failed: ${err}`);
+      }
+    }
+  }
+
+  /** 外部メモリプロバイダーを登録（上限1） */
+  registerExternalProvider(hook: MemoryHook): boolean {
+    if (this.externalProviderCount >= this.MAX_EXTERNAL_PROVIDERS) {
+      logger.warn("[MemoryLifecycle] 外部プロバイダー上限到達（最大1）");
+      return false;
+    }
+    this.on("prefetch", hook);
+    this.on("sync_turn", hook);
+    this.externalProviderCount++;
+    return true;
+  }
+
+  /** 全フックをクリア */
+  clear(): void {
+    this.hooks.clear();
+    this.externalProviderCount = 0;
+  }
+}
+
+export const memoryLifecycle = new MemoryLifecycle();

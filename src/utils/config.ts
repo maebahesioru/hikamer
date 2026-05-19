@@ -140,3 +140,81 @@ export function setMaxIterations(n: number): void {
 export function getSearxngUrl(): string {
   return process.env.SEARXNG_URL || "http://localhost:18080";
 }
+
+// ==========================================
+// Stat-based config caching（hermes-agent config.py パターン）
+// 設定ファイルのmtimeを監視し、変更があった場合のみ再読込。
+// 無駄なfs.readFileSyncを防止し、パフォーマンス向上。
+// ==========================================
+
+import { statSync } from "fs";
+
+interface CacheEntry<T> {
+  value: T;
+  mtimeMs: number;
+  ttlMs: number;
+  fetchedAt: number;
+}
+
+const configCache = new Map<string, CacheEntry<unknown>>();
+
+/**
+ * 設定値をキャッシュ付きで取得。
+ * hermes-agentの stat-based caching 相当。
+ *
+ * @param key - キャッシュキー
+ * @param filePath - 監視するファイルパス（mtimeで変更検知）
+ * @param fetchFn - キャッシュミス時に実行する取得関数
+ * @param ttlMs - キャッシュTTL（デフォルト60秒）
+ */
+export function getCachedConfig<T>(
+  key: string,
+  filePath: string,
+  fetchFn: () => T,
+  ttlMs: number = 60000,
+): T {
+  const cached = configCache.get(key);
+
+  // ファイルのmtimeを取得
+  let fileMtime = 0;
+  try {
+    if (existsSync(filePath)) {
+      fileMtime = statSync(filePath).mtimeMs;
+    }
+  } catch {}
+
+  const now = Date.now();
+
+  // キャッシュヒット判定: mtimeが変わっておらず、TTL内
+  if (cached && cached.mtimeMs === fileMtime && (now - cached.fetchedAt) < cached.ttlMs) {
+    return cached.value as T;
+  }
+
+  // キャッシュミス: 再取得
+  const value = fetchFn();
+  configCache.set(key, {
+    value,
+    mtimeMs: fileMtime,
+    ttlMs,
+    fetchedAt: now,
+  });
+
+  return value;
+}
+
+/** キャッシュを強制無効化 */
+export function invalidateConfigCache(key?: string): void {
+  if (key) {
+    configCache.delete(key);
+  } else {
+    configCache.clear();
+  }
+}
+
+/** キャッシュ統計を取得 */
+export function getConfigCacheStats(): { size: number; keys: string[] } {
+  return {
+    size: configCache.size,
+    keys: Array.from(configCache.keys()),
+  };
+}
