@@ -486,6 +486,50 @@ export class MemoryPipeline {
 
     return entry;
   }
+
+  // ==================== v1.61: Kai式カテゴリ付き記憶強化 ====================
+
+  /** Kai由来: 学習カテゴリ */
+  static readonly CATEGORIES = {
+    LEARNING: "learning",   // 成功体験・うまくいったこと
+    ERROR: "error",         // エラー解決策
+    PREFERENCE: "preference", // ユーザー好み・習慣
+  } as const;
+
+  /**
+   * 記憶を強化（良い結果を出した記憶のヒットカウント増加）
+   * Kai: reinforce() — 成功時に呼び出し、長期記憶への昇格を促進
+   */
+  reinforce(id: string): MemoryEntry | null {
+    const entry = this.entries.find(e => e.id === id);
+    if (!entry) return null;
+
+    entry.accessCount += 3; // 通常アクセスより大きなブースト
+    entry.confidence = Math.min(entry.confidence + 0.15, 1.0);
+    entry.importance = Math.min(entry.importance + 0.1, 1.0);
+    entry.accessedAt = Date.now();
+
+    logger.debug(`[MemoryPipeline] reinforce: ${id} (hits=${entry.accessCount}, conf=${entry.confidence.toFixed(2)})`);
+    return entry;
+  }
+
+  /**
+   * プロモーション候補（ヒット数閾値超えのエントリ）
+   * Kai: getPromotionCandidates() — アクセス頻度が高い記憶を発見
+   */
+  getPromotionCandidates(minHits: number = 5): MemoryEntry[] {
+    return this.entries
+      .filter(e => e.accessCount >= minHits)
+      .sort((a, b) => b.accessCount - a.accessCount);
+  }
+
+  /**
+   * 学習カテゴリでフィルタ
+   * Kai: getByCategory() — カテゴリ別の学習抽出
+   */
+  getByCategory(category: string): MemoryEntry[] {
+    return this.entries.filter(e => e.metadata?.learningCategory === category);
+  }
 }
 
 // デフォルトインスタンス
