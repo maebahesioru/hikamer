@@ -952,6 +952,92 @@ registerCommand("sandbox", async () => {
   return [defaultPolicy.formatPolicy(), "", `🛡️ **サンドボックス**: ${defaultSandbox.name}`].join("\n");
 });
 
+// ==================== v1.60: 投資支援コマンド（株カード + ペーパーポートフォリオ） ====================
+
+registerCommand("stock", async (args) => {
+  const { analyzeStock, formatStockCard } = await import("./stock-card");
+  const symbol = (args || "").trim().toUpperCase();
+  if (!symbol) return "📊 **株カード分析**\n使い方: `/stock <銘柄コード>`\n例: `/stock 6758` (ソニー), `/stock AAPL` (Apple)";
+
+  try {
+    const card = await analyzeStock(symbol);
+    return formatStockCard(card);
+  } catch (e: any) {
+    return `❌ 銘柄分析エラー: ${e.message}\nヒント: 日本株は4桁コード（例: 6758）、米国株はティッカー（例: AAPL）`;
+  }
+});
+
+registerCommand("portfolio", async (args) => {
+  const { paperPortfolio } = await import("./paper-portfolio");
+  paperPortfolio.init();
+
+  const sub = (args || "").trim().toLowerCase();
+
+  if (sub === "buy" || sub.startsWith("buy ")) {
+    const parts = sub.split(/\s+/);
+    const symbol = parts[1];
+    const qty = parseInt(parts[2] || "100", 10);
+    if (!symbol) return "使い方: `/portfolio buy <銘柄> [数量]`\n例: `/portfolio buy 6758 100`";
+    if (isNaN(qty) || qty <= 0) return "数量は正の整数で指定してください。";
+
+    const trade = await paperPortfolio.buy(symbol.toUpperCase(), qty);
+    if (!trade) return "❌ 買付失敗。資金不足か銘柄が見つかりません。";
+    return `✅ **買付完了**\n${trade.symbol} ×${trade.quantity}株 @¥${trade.price.toLocaleString()}\n約定金額: ¥${trade.totalCost.toLocaleString()}\n手数料: ¥${trade.fee.toLocaleString()}`;
+  }
+
+  if (sub === "sell" || sub.startsWith("sell ")) {
+    const parts = sub.split(/\s+/);
+    const symbol = parts[1];
+    const qty = parts[2] ? parseInt(parts[2], 10) : undefined;
+    if (!symbol) return "使い方: `/portfolio sell <銘柄> [数量]`\n例: `/portfolio sell 6758` (全株売却)";
+
+    const trade = await paperPortfolio.sell(symbol.toUpperCase(), qty);
+    if (!trade) return "❌ 売却失敗。ポジションがないか数量不足です。";
+    const pnlSign = (trade.pnl ?? 0) >= 0 ? "+" : "";
+    return `✅ **売却完了**\n${trade.symbol} ×${trade.quantity}株 @¥${trade.price.toLocaleString()}\nP&L: ${pnlSign}¥${trade.pnl?.toLocaleString() || "0"} (${pnlSign}${trade.pnlPercent?.toFixed(2)}%)`;
+  }
+
+  if (sub === "history" || sub === "log") {
+    return paperPortfolio.formatTradeHistory(10);
+  }
+
+  if (sub === "reset") {
+    paperPortfolio.reset();
+    return "🔄 ペーパーポートフォリオをリセットしました（初期資金: ¥1,000,000）";
+  }
+
+  // デフォルト: サマリー表示
+  const summary = await paperPortfolio.getSummary();
+  return paperPortfolio.formatSummary(summary) + "\n\n📋 **サブコマンド**\n" +
+    "`/portfolio buy <銘柄> [数量]` — 買付\n" +
+    "`/portfolio sell <銘柄> [数量]` — 売却\n" +
+    "`/portfolio history` — 取引履歴\n" +
+    "`/portfolio reset` — リセット";
+});
+
+registerCommand("invest", async (args) => {
+  const sub = (args || "").trim().toLowerCase();
+
+  if (!sub || sub === "help") {
+    return "🎯 **投資学習メニュー** (高校生向け・ペーパー取引のみ)\n\n" +
+      "📊 `/stock <銘柄>` — 株カード分析（テクニカル）\n" +
+      "💼 `/portfolio` — ポートフォリオ管理\n" +
+      "📚 `/invest learn` — 投資の基本を学ぶ\n\n" +
+      "⚠️ *すべて仮想取引です。実金は一切動きません。*";
+  }
+
+  if (sub === "learn") {
+    return "📚 **投資のキホン**\n\n" +
+      "**1. 株って何？**\n会社の所有権を小分けにしたもの。株を買う＝会社の一部オーナーになる。\n\n" +
+      "**2. どうやって儲かる？**\n• キャピタルゲイン: 安く買って高く売る\n• 配当: 会社の利益の一部をもらう\n\n" +
+      "**3. リスク**\n• 株価は必ず変動する\n• 「絶対上がる」は存在しない\n• 失っても大丈夫な額だけ投資する\n\n" +
+      "**4. 指標の見方**\n• トレンド: SMAで方向を見る\n• RSI: 70以上=買われすぎ、30以下=売られすぎ\n• 出来高: 多い=注目されてる\n\n" +
+      "**5. 高校生ルール**\n• ✅ ペーパートレードで練習\n• ✅ 少額から始める（バイト代の一部）\n• ❌ 借金して投資しない\n• ❌ 「絶対儲かる」話は全部ウソ";
+  }
+
+  return "📋 不明なサブコマンド。`/invest help` で一覧表示。";
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
