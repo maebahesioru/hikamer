@@ -1193,6 +1193,40 @@ registerCommand("pending", async () => {
   return humanInTheLoop.formatPending();
 });
 
+// ==================== v1.68: テレメトリー（langfuse + GEPA自己進化パターン） ====================
+
+registerCommand("telemetry", async (args) => {
+  const { telemetry } = await import("./telemetry");
+  telemetry.init();
+  const sub = (args || "").trim();
+
+  if (sub === "report" || !sub) {
+    const report = telemetry.getReport();
+    return telemetry.formatReport(report);
+  }
+
+  if (sub === "errors") {
+    return telemetry.formatFailurePatterns();
+  }
+
+  if (sub === "recommend" || sub === "rec") {
+    const recs = telemetry.generateRecommendations();
+    if (recs.length === 0) return "✅ 改善提案はありません。十分に安定しています！";
+    return "💡 **改善提案** (GEPA自己進化)\n\n" + recs.join("\n");
+  }
+
+  if (sub === "reset") {
+    telemetry.reset();
+    return "🔄 テレメトリーをリセットしました。";
+  }
+
+  if (sub.startsWith("session ")) {
+    return telemetry.formatSessionDetail(sub.slice(8));
+  }
+
+  return "📊 `/telemetry report` — 全体レポート\n`/telemetry errors` — 失敗パターン\n`/telemetry recommend` — 改善提案\n`/telemetry session <id>` — セッション詳細";
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
