@@ -328,7 +328,7 @@ const browserTool: ToolDescriptor = {
   emoji: "🌐",
   owner: "core",
   name: "browser",
-  description: "camofoxステルスブラウザ(優先) または playwright(自動フォールバック)でWebを操作。navigate/extract/click/type/screenshot/close。",
+  description: "camofoxステルスブラウザ(優先) または playwright(自動フォールバック)でWebを操作。navigate/extract/click/type/screenshot/close。include_snapshot=trueで操作後のページ状態を自動返却（往復削減）。",
   parameters: {
     type: "object",
     properties: {
@@ -340,13 +340,18 @@ const browserTool: ToolDescriptor = {
       url: { type: "string", description: "navigate時のURL" },
       selector: { type: "string", description: "click/type時のセレクタ(ref)" },
       text: { type: "string", description: "type時の入力テキスト" },
+      include_snapshot: { type: "boolean", description: "操作後にページスナップショットも返す（デフォルト: true）。エージェント往復削減に有効。" },
+      user_agent: { type: "string", description: "UAプリセット: default/claude/claude_desktop/ai/chatgpt/googlebot/mobile/mobile_android/edge/firefox" },
     },
     required: ["action"],
   },
   async execute(args) {
     const action = args.action as string;
+    const includeSnapshot = args.include_snapshot !== false; // デフォルトtrue
 
     try {
+      let result: string;
+
       // camofoxが生きてれば優先使用
       if (await checkCamofoxAlive()) {
         try {
@@ -354,41 +359,73 @@ const browserTool: ToolDescriptor = {
             case "navigate": {
               const url = args.url as string;
               if (!url) return "[エラー] url が必要";
-              return await camofoxNavigate(url);
+              result = await camofoxNavigate(url);
+              break;
             }
             case "extract":
-              return await camofoxExtract();
+              result = await camofoxExtract();
+              break;
             case "click": {
               const ref: string = (args.selector || (args as any).ref || "") as string;
               if (!ref) return "[エラー] selector(ref) が必要";
-              return await camofoxClick(ref);
+              result = await camofoxClick(ref);
+              break;
             }
             case "type": {
               const ref: string = (args.selector || (args as any).ref || "") as string;
               const text: string = (args.text || "") as string;
               if (!ref || !text) return "[エラー] selector(ref) と text が必要";
-              return await camofoxType(ref, text);
+              result = await camofoxType(ref, text);
+              break;
             }
             case "screenshot":
-              return await camofoxScreenshot();
+              result = await camofoxScreenshot();
+              break;
             case "close": {
               await camofoxClose();
               if (playwrightBrowser) { await playwrightBrowser.close().catch(() => {}); playwrightBrowser = null; playwrightPage = null; }
-              return "ブラウザを閉じました。";
+              result = "ブラウザを閉じました。";
+              break;
             }
             default:
               return `[エラー] 不明なアクション: ${action}`;
           }
+
+          // include_snapshot: 操作後に追加スナップショットを取得（click/typeはcamofox側で既に返却）
+          if (includeSnapshot && action !== "close" && action !== "screenshot") {
+            try {
+              // click/typeはcamofoxが既にsnapshotを含めて返すのでスキップ
+              if (action !== "click" && action !== "type") {
+                const snap = await camofoxSnapshot();
+                result += `\n\n## 現在のページ状態\n${snap}`;
+              }
+            } catch { /* snapshot失敗は無視 */ }
+          }
+
+          return result;
+
         } catch (e: any) {
           // camofox失敗→playwrightにフォールバック
           logger.debug(`camofox失敗、playwrightにフォールバック: ${e.message}`);
           camofoxAlive = false;
-          return await fallbackPlaywright(args);
+          result = await fallbackPlaywright(args);
         }
+      } else {
+        // camofox未起動→playwright直行
+        result = await fallbackPlaywright(args);
       }
 
-      // camofox未起動→playwright直行
-      return await fallbackPlaywright(args);
+      // include_snapshot: Playwright結果にもスナップショット追加（navigate/extract/click時）
+      if (includeSnapshot && action !== "close" && result && !result.startsWith("[エラー]")) {
+        try {
+          if (playwrightPage && !playwrightPage.isClosed()) {
+            const text = await playwrightPage.evaluate(() => document.body.innerText.slice(0, 5000));
+            result += `\n\n## 現在のページ状態\n[Playwright] ${playwrightPage.url()}\n\n${text}`;
+          }
+        } catch { /* ignore */ }
+      }
+
+      return result;
 
     } catch (e: any) {
       return `[エラー] ブラウザ操作失敗: ${e.message}`;

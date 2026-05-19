@@ -105,6 +105,7 @@ export async function observeMemory(
     entities?: string[];
     importance?: number;
     tier?: MemoryTier;
+    contentCategory?: import("./memory-pipeline").ContentCategory;
   }
 ): Promise<void> {
   const p = getPipeline();
@@ -112,12 +113,14 @@ export async function observeMemory(
     await p.remember(text, {
       entities: options.entities,
       importance: options.importance,
+      contentCategory: options.contentCategory ?? "static",
     });
   } else {
     await p.observe(text, {
       sessionId: options?.sessionId,
       entities: options?.entities,
       importance: options?.importance,
+      contentCategory: options?.contentCategory ?? "dynamic",
     });
   }
   savePipelineToDisk();
@@ -151,13 +154,19 @@ export async function searchMemory(
 /**
  * コンテキストブロックを生成（トークン予算あり）
  * システムプロンプトに注入するための関連メモリブロック
+ * v1.59: Thin/Fatモード対応（paperclip由来）
  */
 export async function buildEnhancedMemoryBlock(
   contextQuery: string,
-  tokenBudget: number = 1500
+  tokenBudget: number = 1500,
+  contextMode: import("./memory-pipeline").ContextMode = "fat",
 ): Promise<string> {
   const p = getPipeline();
-  const contextBlock = await p.getContextBlock(contextQuery, tokenBudget);
+  const contextBlock = await p.getContextBlock(contextQuery, tokenBudget, contextMode);
+
+  if (contextMode === "thin") {
+    return contextBlock; // Thinモードでは従来のFrozen Snapshotは含めない（軽量が目的）
+  }
 
   const traditional = buildMemoryBlock();
 

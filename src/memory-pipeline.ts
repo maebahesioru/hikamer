@@ -2,6 +2,9 @@
 // Aikata - 4階層メモリ統合パイプライン
 // 出典: agentmemory (rohitg00/agentmemory) の4-Tier Memory Consolidation
 // Working → Episodic → Semantic → Procedural
+// v1.59: 3層コンテンツカテゴリ (supermemory由来) + LRUターンキャッシュ
+//   ContentCategory: Static(恒久) / Dynamic(最近) / Search(検索結果)
+//   これは4-Tierパイプラインと直交する軸
 // ==========================================
 
 import { logger } from "./utils/logger";
@@ -11,6 +14,12 @@ import { HybridSearch, SearchDocument, getDefaultSearch, tokenEmbedding } from "
 
 /** メモリ階層（agentmemoryの4-Tierに準拠） */
 export type MemoryTier = "working" | "episodic" | "semantic" | "procedural";
+
+/** コンテンツカテゴリ（supermemory由来: 記憶の鮮度・永続性による分類） */
+export type ContentCategory = "static" | "dynamic" | "search";
+
+/** コンテキスト配送モード（paperclip由来） */
+export type ContextMode = "thin" | "fat";
 
 /** メモリエントリ */
 export interface MemoryEntry {
@@ -26,6 +35,8 @@ export interface MemoryEntry {
   createdAt: number;         // unix ms
   accessedAt: number;
   importance: number;        // 0.0 - 1.0（agentmemoryのimportanceと同等）
+  /** v1.59: コンテンツカテゴリ（4-Tierとは直交） */
+  contentCategory: ContentCategory;
   metadata?: Record<string, unknown>;
 }
 
@@ -66,6 +77,12 @@ export class MemoryPipeline {
   private lastConsolidation = 0;
   private consolidationTimer: ReturnType<typeof setInterval> | null = null;
 
+  /** v1.59: LRUターンキャッシュ — 同一会話ターン内の重複検索を防止 */
+  private turnCache: Map<string, { result: MemoryEntry[]; timestamp: number }> = new Map();
+  private turnCacheMaxSize = 100;
+  /** 現在のターンID（会話ID。ターンが変わったらキャッシュクリア） */
+  private currentTurnId: string | null = null;
+
   constructor(config?: Partial<PipelineConfig>, search?: HybridSearch) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.searchEngine = search ?? getDefaultSearch();
@@ -97,6 +114,7 @@ export class MemoryPipeline {
     projectScope?: string;
     entities?: string[];
     importance?: number;
+    contentCategory?: ContentCategory;
     metadata?: Record<string, unknown>;
   }): Promise<MemoryEntry> {
     const entry: MemoryEntry = {
@@ -111,6 +129,7 @@ export class MemoryPipeline {
       createdAt: Date.now(),
       accessedAt: Date.now(),
       importance: options?.importance ?? 0.3,
+      contentCategory: options?.contentCategory ?? "dynamic",
       metadata: options?.metadata,
     };
 
@@ -133,9 +152,18 @@ export class MemoryPipeline {
   }
 
   /**
-   * ハイブリッド検索
+   * ハイブリッド検索（LRUターンキャッシュ付き）
    */
-  async search(query: string, limit: number = 10): Promise<MemoryEntry[]> {
+  async search(query: string, limit: number = 10, turnId?: string): Promise<MemoryEntry[]> {
+    // v1.59: ターンキャッシュチェック
+    const cacheKey = `${turnId || this.currentTurnId || "default"}:${query}:${limit}`;
+    const cached = this.turnCache.get(cacheKey);
+    if (cached) {
+      cached.timestamp = Date.now();
+      logger.debug(`[MemoryPipeline] ターンキャッシュヒット: ${query.slice(0, 30)}`);
+      return cached.result;
+    }
+
     const results = await this.searchEngine.search(query, { limit });
 
     // アクセスカウント更新
@@ -147,9 +175,26 @@ export class MemoryPipeline {
       }
     }
 
-    return results
+    const entries = results
       .map(r => this.entries.find(e => e.id === r.document.id))
       .filter((e): e is MemoryEntry => e !== undefined);
+
+    // キャッシュに保存
+    this.turnCache.set(cacheKey, { result: entries, timestamp: Date.now() });
+    // LRU: 上限超えたら古いものを削除
+    if (this.turnCache.size > this.turnCacheMaxSize) {
+      const oldest = [...this.turnCache.entries()]
+        .sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
+      if (oldest) this.turnCache.delete(oldest[0]);
+    }
+
+    return entries;
+  }
+
+  /** ターン切替: キャッシュをクリア */
+  clearTurnCache(newTurnId?: string): void {
+    this.turnCache.clear();
+    if (newTurnId) this.currentTurnId = newTurnId;
   }
 
   /**
@@ -310,8 +355,15 @@ export class MemoryPipeline {
   /**
    * トークン予算内でコンテキストブロックを生成
    * agentmemory: mem::context → token-budget-respecting context block
+   * v1.59: Thin/Fatモード（paperclip由来）
+   *   thin = IDとメタデータのみ（最小トークン）
+   *   fat  = 全文を含む（従来通り、デフォルト）
    */
-  async getContextBlock(query: string, tokenBudget: number = 2000): Promise<string> {
+  async getContextBlock(
+    query: string,
+    tokenBudget: number = 2000,
+    contextMode: ContextMode = "fat",
+  ): Promise<string> {
     const results = await this.search(query, 20);
 
     // 優先度: procedural > semantic > episodic > working
@@ -323,6 +375,19 @@ export class MemoryPipeline {
       return b.confidence - a.confidence;
     });
 
+    // Thin モード: ID + メタデータのみ
+    if (contextMode === "thin") {
+      const thinParts: string[] = [];
+      for (const entry of prioritized.slice(0, 15)) {
+        thinParts.push(
+          `[${entry.tier.toUpperCase()}][${entry.contentCategory}] ` +
+          `${(entry.confidence * 100).toFixed(0)}% ${entry.id} ${(entry.summary || entry.text).slice(0, 80)}`
+        );
+      }
+      return `<memory_context mode="thin">\n${thinParts.join("\n")}\n</memory_context>`;
+    }
+
+    // Fat モード: 全文（従来通り）
     const parts: string[] = [];
     let totalTokens = 0;
 
@@ -332,7 +397,7 @@ export class MemoryPipeline {
 
       if (totalTokens + estimatedTokens > tokenBudget) break;
 
-      parts.push(`【${entry.tier.toUpperCase()}】${text}`);
+      parts.push(`【${entry.tier.toUpperCase()}】【${entry.contentCategory}】${text}`);
       totalTokens += estimatedTokens;
     }
 
@@ -393,6 +458,7 @@ export class MemoryPipeline {
     entities?: string[];
     importance?: number;
     projectScope?: string;
+    contentCategory?: ContentCategory;
   }): Promise<MemoryEntry> {
     const entry: MemoryEntry = {
       id: this.generateId(),
@@ -404,6 +470,7 @@ export class MemoryPipeline {
       createdAt: Date.now(),
       accessedAt: Date.now(),
       importance: options?.importance ?? 0.7,
+      contentCategory: options?.contentCategory ?? "static",
       metadata: { source: "manual" },
       projectScope: options?.projectScope,
     };
