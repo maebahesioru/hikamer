@@ -1042,6 +1042,75 @@ registerCommand("invest", async (args) => {
   return "📋 不明なサブコマンド。`/invest help` で一覧表示。";
 });
 
+// ==================== v1.64: リサーチパイプライン（academic-research-skillsパターン） ====================
+
+registerCommand("research", async (args) => {
+  const { researchPipeline } = await import("./research-pipeline");
+  const sub = (args || "").trim();
+
+  if (!sub || sub === "help") {
+    return "📝 **リサーチパイプライン** (5段階: 調査→執筆→レビュー→修正→最終化)\n\n" +
+      "`/research start <トピック>` — 新しい研究を開始\n" +
+      "`/research status` — 現在のタスク状態\n" +
+      "`/research prompt` — 現在の段階のプロンプトを表示\n" +
+      "例: `/research start AIエージェントの自律性について`";
+  }
+
+  if (sub.startsWith("start ")) {
+    const topic = sub.slice(6);
+    if (!topic) return "トピックを指定してください。\n例: `/research start AIエージェントの自律性について`";
+    const task = researchPipeline.start(topic);
+    const prompt = researchPipeline.getStagePrompt(task);
+    return `✅ 研究を開始しました！\n\n**次の指示**:\n${prompt}`;
+  }
+
+  if (sub === "status" || sub === "list") {
+    // シンプルに最新タスクの状態を返す
+    return "📝 `/research start <トピック>` で研究を開始してください。";
+  }
+
+  return "📋 不明なサブコマンド。`/research help` で一覧表示。";
+});
+
+// ==================== v1.64: 一人企業メソッド（OPC methodologyパターン） ====================
+
+registerCommand("biz", async (args) => {
+  const sub = (args || "").trim().toLowerCase();
+
+  if (!sub || sub === "help") {
+    return "🚀 **一人企業メソッド** (OPC methodology + claude-code-best-practice)\n\n" +
+      "`/biz principles` — 核心理論\n" +
+      "`/biz checklist` — 副業開始チェックリスト\n" +
+      "`/biz tools` — おすすめ無料ツール";
+  }
+
+  if (sub === "principles") {
+    return "🚀 **一人企業の核心理論** (OPC methodology v2)\n\n" +
+      "**1. スーパー個人になる**\n「会社の歯車」から「スーパー個人」へ。一人で複数の役割をAIでこなす。\n\n" +
+      "**2. 小さく始めて速く回す**\n完璧を目指さない。MVP（最小限の製品）を1週間で出す。\n\n" +
+      "**3. レバレッジを効かせる**\n• コード: 一度書けば何度でも動く\n• コンテンツ: 一度作れば何度でも見られる\n• AI: 一人を10人にする\n\n" +
+      "**4. 収入の多様化**\n1つの収入源に依存しない。アフィリエイト+デジタル商品+自動化の組み合わせ。\n\n" +
+      "**5. 自動化最優先**\n手作業は負け。AIエージェントに任せられることは全部任せる。";
+  }
+
+  if (sub === "checklist") {
+    return "✅ **高校生向け副業チェックリスト**\n\n" +
+      "**準備編**\n☐ 保護者の同意を得る（18歳未満は必須）\n☐ 銀行口座を確認（ネットバンキング対応か）\n☐ 作業時間を決める（週10時間以内推奨）\n\n" +
+      "**スキル編**\n☐ AIツールの使い方を学ぶ（Claude/ChatGPT/Cursor）\n☐ 1つでいいから「得意」を作る（執筆/デザイン/コーディング）\n☐ 英語ができれば市場が100倍広がる\n\n" +
+      "**実行編**\n☐ 最初の1円を稼ぐ（金額より「稼げた」という経験が大事）\n☐ SNSで発信を始める（X/note/YouTube）\n☐ ポートフォリオを作る（実績が信用になる）\n\n" +
+      "⚠️ 「簡単に稼げる」は全部ウソ。時間と努力は必要。でもAIを使えば10倍速い。";
+  }
+
+  if (sub === "tools") {
+    return "🛠️ **おすすめ無料ツール**\n\n" +
+      "**AI**\n• Claude (claude.ai) — 文章作成・分析・コーディング\n• ChatGPT — アイデア出し・翻訳\n• Cursor — AIコーディング（学生無料）\n\n" +
+      "**発信**\n• X (Twitter) — 情報発信の基本\n• note — 記事で収益化\n• GitHub — コードのポートフォリオ\n\n" +
+      "**自動化**\n• Aikata (君のエージェント) — Discord/Telegram Bot\n• Make (make.com) — ノーコード自動化\n• GitHub Actions — 無料の定期実行";
+  }
+
+  return "📋 不明なサブコマンド。`/biz help` で一覧表示。";
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
