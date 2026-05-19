@@ -1,359 +1,251 @@
 // ==========================================
-// Aikata - プラグインシステム（OpenClaw plugin由来）
-// 動的ロード/アンロード/ホットリロード/ライフサイクル管理
+// Aikata - Plugin System (v1.69)
+// 出典: paperclip adapter-plugin pattern + superpowers plugin loading
+// 外部拡張の動的読み込み・ホットリロード
 // ==========================================
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, watch } from "fs";
-import { resolve, dirname, basename } from "path";
 import { logger } from "./utils/logger";
-import { eventBus, createEvent } from "./event-bus";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
+import { resolve, join } from "path";
 
 // ==================== 型定義 ====================
-
-export type PluginPhase = "init" | "load" | "activate" | "ready" | "deactivate" | "unload" | "error";
 
 export interface PluginManifest {
   name: string;
   version: string;
   description: string;
   author?: string;
-  requires?: string[]; // 依存プラグイン
-  configSchema?: Record<string, unknown>;
-}
-
-export interface Plugin {
-  manifest: PluginManifest;
-  phase: PluginPhase;
-  /** プラグインのコアAPI */
-  api: PluginAPI;
-  config: Record<string, unknown>;
-  loadedAt: number;
-  error?: string;
-}
-
-export interface PluginAPI {
-  /** プラグインのフック関数 */
-  hooks: {
-    onInit?: () => void | Promise<void>;
-    onActivate?: () => void | Promise<void>;
-    onDeactivate?: () => void | Promise<void>;
-    onConfigChange?: (config: Record<string, unknown>) => void | Promise<void>;
-    onMessage?: (message: string) => string | Promise<string>;
-    onToolCall?: (toolName: string, args: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>;
-    onShutdown?: () => void | Promise<void>;
+  /** エントリポイント（相対パス） */
+  main: string;
+  /** プラグインが提供するコマンド */
+  commands?: Record<string, {
+    description: string;
+    handler: string; // export名
+  }>;
+  /** プラグインが提供するツール */
+  tools?: string[];
+  /** プラグインが提供するスキル */
+  skills?: string[];
+  /** 依存プラグイン */
+  dependencies?: Record<string, string>;
+  /** フック */
+  hooks?: {
+    onLoad?: string;
+    onUnload?: string;
+    preToolUse?: string;
+    postToolUse?: string;
   };
-  /** プラグイン関数 */
-  methods: Record<string, (...args: any[]) => any>;
+}
+
+export interface LoadedPlugin {
+  manifest: PluginManifest;
+  path: string;
+  module: any;
+  loadedAt: number;
+  status: "active" | "error" | "disabled";
+  error?: string;
 }
 
 // ==================== プラグインマネージャー ====================
 
-class PluginManager {
-  private plugins = new Map<string, Plugin>();
-  private pluginDir: string;
+const PLUGINS_DIR = resolve(process.env.DATA_DIR || "./data", "plugins");
+const PLUGINS_JSON = resolve(PLUGINS_DIR, "plugins.json");
 
-  constructor(pluginDir?: string) {
-    this.pluginDir = pluginDir || resolve(process.cwd(), "plugins");
-    if (!existsSync(this.pluginDir)) {
-      mkdirSync(this.pluginDir, { recursive: true });
-      // サンプルプラグイン作成
-      this.createSamplePlugin();
-    }
+class PluginManager {
+  private plugins: Map<string, LoadedPlugin> = new Map();
+  private initialized = false;
+
+  init(): void {
+    if (this.initialized) return;
+    this.initialized = true;
+    this.ensureDir();
+    this.loadFromDisk();
+    logger.info(`[PluginManager] ${this.plugins.size}個のプラグインを読み込み`);
   }
 
-  /** 全プラグインのディレクトリをスキャンしてロード */
-  async scanAndLoadAll(): Promise<void> {
-    const { readdirSync } = require("fs") as typeof import("fs");
+  /**
+   * プラグインを登録（ディレクトリから plugin.json を読み込み）
+   */
+  async register(pluginPath: string): Promise<LoadedPlugin | null> {
+    const manifestPath = join(pluginPath, "plugin.json");
+    if (!existsSync(manifestPath)) {
+      logger.error(`[PluginManager] plugin.jsonが見つかりません: ${pluginPath}`);
+      return null;
+    }
+
     try {
-      const dirs = readdirSync(this.pluginDir, { withFileTypes: true });
-      for (const dir of dirs) {
-        if (dir.isDirectory()) {
-          await this.loadPlugin(dir.name);
+      const manifest: PluginManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+
+      // 依存チェック
+      if (manifest.dependencies) {
+        for (const [dep, version] of Object.entries(manifest.dependencies)) {
+          if (!this.plugins.has(dep)) {
+            logger.warn(`[PluginManager] ${manifest.name}: 依存 ${dep}@${version} が未インストール`);
+          }
         }
       }
-      logger.info(`[Plugin] スキャン完了: ${this.plugins.size}プラグイン`);
-    } catch (e: any) {
-      logger.error(`[Plugin] スキャン失敗: ${e.message}`);
-    }
-  }
 
-  /** プラグインをロード */
-  async loadPlugin(name: string): Promise<Plugin> {
-    // 既存チェック
-    if (this.plugins.has(name)) {
-      await this.unloadPlugin(name);
-    }
-
-    const pluginPath = resolve(this.pluginDir, name);
-
-    // manifest.json読み込み
-    const manifestPath = resolve(pluginPath, "manifest.json");
-    if (!existsSync(manifestPath)) {
-      throw new Error(`manifest.json が見つかりません: ${name}`);
-    }
-
-    const manifest: PluginManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    if (manifest.name !== name) manifest.name = name;
-
-    // 設定ファイル読み込み
-    const configPath = resolve(pluginPath, "config.json");
-    let config: Record<string, unknown> = {};
-    if (existsSync(configPath)) {
-      config = JSON.parse(readFileSync(configPath, "utf-8"));
-    }
-
-    // index.js/index.tsを探す
-    let scriptPath = resolve(pluginPath, "index.js");
-    let script: any = null;
-
-    if (existsSync(scriptPath)) {
-      delete require.cache[scriptPath]; // キャッシュクリア
+      // 動的読み込み
+      let mod: any = {};
       try {
-        script = require(scriptPath);
+        const mainPath = join(pluginPath, manifest.main);
+        if (existsSync(mainPath)) {
+          mod = await import(mainPath);
+        }
       } catch (e: any) {
-        logger.error(`[Plugin] スクリプトエラー: ${name} — ${e.message}`);
-        script = {};
+        logger.warn(`[PluginManager] ${manifest.name}: モジュール読み込み失敗: ${e.message}`);
       }
-    }
 
-    // API構築
-    const api: PluginAPI = {
-      hooks: {
-        onInit: script?.onInit,
-        onActivate: script?.onActivate,
-        onDeactivate: script?.onDeactivate,
-        onConfigChange: script?.onConfigChange,
-        onMessage: script?.onMessage,
-        onToolCall: script?.onToolCall,
-        onShutdown: script?.onShutdown,
-      },
-      methods: script?.methods || {},
-    };
+      const loaded: LoadedPlugin = {
+        manifest,
+        path: pluginPath,
+        module: mod,
+        loadedAt: Date.now(),
+        status: "active",
+      };
 
-    const plugin: Plugin = {
-      manifest,
-      phase: "init",
-      api,
-      config,
-      loadedAt: Date.now(),
-    };
+      this.plugins.set(manifest.name, loaded);
+      this.saveToDisk();
 
-    this.plugins.set(name, plugin);
+      // onLoadフック
+      if (manifest.hooks?.onLoad && mod[manifest.hooks.onLoad]) {
+        try { mod[manifest.hooks.onLoad](); } catch {}
+      }
 
-    // ライフサイクル: init
-    try {
-      if (api.hooks.onInit) await api.hooks.onInit();
-      plugin.phase = "load";
-      logger.info(`[Plugin] ロード: ${name} v${manifest.version}`);
-      eventBus.publish(createEvent("system", "pluginLoaded", { name, version: manifest.version }));
+      logger.info(`[PluginManager] 登録: ${manifest.name} v${manifest.version}`);
+      return loaded;
     } catch (e: any) {
-      plugin.phase = "error";
-      plugin.error = e.message;
-      logger.error(`[Plugin] init失敗: ${name} — ${e.message}`);
-    }
-
-    return plugin;
-  }
-
-  /** プラグインをアクティベート */
-  async activatePlugin(name: string): Promise<boolean> {
-    const plugin = this.plugins.get(name);
-    if (!plugin) return false;
-    if (plugin.phase === "ready") return true;
-
-    try {
-      if (plugin.api.hooks.onActivate) await plugin.api.hooks.onActivate();
-      plugin.phase = "ready";
-      logger.info(`[Plugin] アクティベート: ${name}`);
-      eventBus.publish(createEvent("system", "pluginActivated", { name }));
-      return true;
-    } catch (e: any) {
-      plugin.phase = "error";
-      plugin.error = e.message;
-      logger.error(`[Plugin] activate失敗: ${name} — ${e.message}`);
-      return false;
+      logger.error(`[PluginManager] 登録失敗: ${e.message}`);
+      return null;
     }
   }
 
-  /** プラグインを非アクティベート */
-  async deactivatePlugin(name: string): Promise<boolean> {
+  /** プラグインを削除 */
+  unregister(name: string): boolean {
     const plugin = this.plugins.get(name);
     if (!plugin) return false;
 
-    try {
-      if (plugin.api.hooks.onDeactivate) await plugin.api.hooks.onDeactivate();
-      plugin.phase = "load";
-      logger.info(`[Plugin] 非アクティベート: ${name}`);
-      eventBus.publish(createEvent("system", "pluginDeactivated", { name }));
-      return true;
-    } catch (e: any) {
-      logger.warn(`[Plugin] deactivate警告: ${name} — ${e.message}`);
-      plugin.phase = "load";
-      return true;
+    // onUnloadフック
+    if (plugin.manifest.hooks?.onUnload && plugin.module[plugin.manifest.hooks.onUnload]) {
+      try { plugin.module[plugin.manifest.hooks.onUnload](); } catch {}
     }
-  }
 
-  /** プラグインをアンロード */
-  async unloadPlugin(name: string): Promise<boolean> {
-    const plugin = this.plugins.get(name);
-    if (!plugin) return false;
-
-    await this.deactivatePlugin(name);
     this.plugins.delete(name);
-    logger.info(`[Plugin] アンロード: ${name}`);
-    eventBus.publish(createEvent("system", "pluginUnloaded", { name }));
+    this.saveToDisk();
+    logger.info(`[PluginManager] 削除: ${name}`);
     return true;
   }
 
-  /** ホットリロード */
-  async reloadPlugin(name: string): Promise<boolean> {
-    logger.info(`[Plugin] ホットリロード: ${name}`);
-    await this.unloadPlugin(name);
-    await this.loadPlugin(name);
-    await this.activatePlugin(name);
-    return this.plugins.has(name);
-  }
-
-  /** プラグイン取得 */
-  getPlugin(name: string): Plugin | undefined {
-    return this.plugins.get(name);
-  }
-
-  /** 全プラグイン一覧 */
-  listPlugins(): Array<{
-    name: string;
-    version: string;
-    description: string;
-    phase: PluginPhase;
-    loadedAt: number;
-    uptime: number;
-    error?: string;
-  }> {
-    return Array.from(this.plugins.values()).map(p => ({
-      name: p.manifest.name,
-      version: p.manifest.version,
-      description: p.manifest.description,
-      phase: p.phase,
-      loadedAt: p.loadedAt,
-      uptime: Date.now() - p.loadedAt,
-      error: p.error,
-    }));
-  }
-
-  /** メッセージフック（全プラグインにメッセージを渡す） */
-  async runMessageHooks(message: string): Promise<string> {
-    let result = message;
-    for (const plugin of Array.from(this.plugins.values())) {
-      if (plugin.phase === "ready" && plugin.api.hooks.onMessage) {
-        try {
-          const r = await plugin.api.hooks.onMessage(result);
-          if (r) result = r;
-        } catch {}
-      }
-    }
-    return result;
-  }
-
-  /** ツール呼び出しフック */
-  async runToolCallHooks(toolName: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-    let result = { ...args };
-    for (const plugin of Array.from(this.plugins.values())) {
-      if (plugin.phase === "ready" && plugin.api.hooks.onToolCall) {
-        try {
-          const r = await plugin.api.hooks.onToolCall(toolName, result);
-          if (r) result = r;
-        } catch {}
-      }
-    }
-    return result;
-  }
-
-  /** シャットダウン */
-  async shutdownAll(): Promise<void> {
-    for (const name of Array.from(this.plugins.keys())) {
-      const plugin = this.plugins.get(name);
-      if (plugin && plugin.api.hooks.onShutdown) {
-        try { await plugin.api.hooks.onShutdown(); } catch {}
-      }
-    }
-    this.plugins.clear();
-    logger.info("[Plugin] 全プラグインシャットダウン");
-  }
-
-  /** プラグインフォルダの変更監視（ホットリロード） */
-  startHotReload(): void {
-    try {
-      watch(this.pluginDir, { recursive: true }, async (event, filename) => {
-        if (!filename) return;
-        const name = basename(filename.toString()).split(".")[0]!;
-        if (name && this.plugins.has(name)) {
-          logger.info(`[Plugin] 変更検出: ${name} — ホットリロード`);
-          await this.reloadPlugin(name);
+  /** 全プラグインのコマンドを取得 */
+  getAllCommands(): Map<string, { plugin: string; description: string; handler: string }> {
+    const commands = new Map<string, { plugin: string; description: string; handler: string }>();
+    for (const [name, plugin] of this.plugins) {
+      if (plugin.status !== "active") continue;
+      if (plugin.manifest.commands) {
+        for (const [cmdName, cmd] of Object.entries(plugin.manifest.commands)) {
+          commands.set(cmdName, { plugin: name, description: cmd.description, handler: cmd.handler });
         }
-      });
-      logger.info(`[Plugin] ホットリロード監視: ${this.pluginDir}`);
+      }
+    }
+    return commands;
+  }
+
+  /** プラグインのコマンドを実行 */
+  async executeCommand(pluginName: string, command: string, args: string): Promise<string | null> {
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin || plugin.status !== "active") return null;
+    if (!plugin.manifest.commands?.[command]) return null;
+
+    const handlerName = plugin.manifest.commands[command]!.handler;
+    const handler = plugin.module[handlerName];
+    if (typeof handler !== "function") return null;
+
+    try {
+      return await handler(args);
     } catch (e: any) {
-      logger.warn(`[Plugin] ホットリロード監視失敗: ${e.message}`);
+      return `[Plugin Error] ${pluginName}/${command}: ${e.message}`;
     }
   }
 
-  /** フォーマット */
+  /** インストール可能なプラグインを探す */
+  discoverPlugins(searchPath?: string): PluginManifest[] {
+    const dirs = searchPath ? [searchPath] : [PLUGINS_DIR];
+    const manifests: PluginManifest[] = [];
+
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue;
+      try {
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const manifestPath = join(dir, entry.name, "plugin.json");
+          if (existsSync(manifestPath)) {
+            try {
+              manifests.push(JSON.parse(readFileSync(manifestPath, "utf-8")));
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    return manifests;
+  }
+
   formatPlugins(): string {
-    const list = this.listPlugins();
-    if (list.length === 0) return "🧩 プラグインはロードされていません。";
-
-    return [
-      "🧩 **プラグイン一覧**",
-      "",
-      ...list.map(p => {
-        const phaseIcon = p.phase === "ready" ? "✅" : p.phase === "error" ? "❌" : "⏳";
-        const uptime = Math.floor(p.uptime / 1000);
-        return `${phaseIcon} **${p.name}** v${p.version}\n` +
-          `   ${p.description}\n` +
-          `   状態: ${p.phase}${p.error ? ` (${p.error})` : ""} | 稼働: ${uptime}s`;
-      }),
-      `\n合計: ${list.length}プラグイン`,
-    ].join("\n");
-  }
-
-  /** サンプルプラグイン作成 */
-  private createSamplePlugin(): void {
-    const sampleDir = resolve(this.pluginDir, "echo");
-    if (!existsSync(sampleDir)) mkdirSync(sampleDir, { recursive: true });
-
-    const manifest: PluginManifest = {
-      name: "echo",
-      version: "1.0.0",
-      description: "メッセージをエコーするサンプルプラグイン",
-      author: "Aikata",
-    };
-
-    writeFileSync(resolve(sampleDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf-8");
-    writeFileSync(resolve(sampleDir, "config.json"), JSON.stringify({ prefix: "[Echo] " }, null, 2), "utf-8");
-
-    writeFileSync(resolve(sampleDir, "index.js"), `
-// Aikata サンプルプラグイン: echo
-module.exports = {
-  onInit() {
-    console.log("[Echo Plugin] 初期化完了");
-  },
-  onActivate() {
-    console.log("[Echo Plugin] アクティベート");
-  },
-  onMessage(message) {
-    const config = require(resolve(__dirname, "config.json"));
-    return config.prefix + message;
-  },
-  methods: {
-    repeat(text, count) {
-      return Array(count).fill(text).join(" ");
+    const lines: string[] = ["🔌 **プラグイン**", ""];
+    if (this.plugins.size === 0) {
+      lines.push("インストール済みプラグインはありません。");
+      lines.push("`/plugin scan` で利用可能なプラグインを探せます。");
+      return lines.join("\n");
     }
+
+    for (const [name, plugin] of this.plugins) {
+      const icon = plugin.status === "active" ? "✅" : "❌";
+      lines.push(`${icon} **${name}** v${plugin.manifest.version}`);
+      lines.push(`  ${plugin.manifest.description.slice(0, 80)}`);
+      if (plugin.manifest.commands) {
+        lines.push(`  コマンド: ${Object.keys(plugin.manifest.commands).join(", ")}`);
+      }
+    }
+
+    return lines.join("\n");
   }
-};
-`, "utf-8");
+
+  private ensureDir(): void {
+    if (!existsSync(PLUGINS_DIR)) mkdirSync(PLUGINS_DIR, { recursive: true });
+  }
+
+  private saveToDisk(): void {
+    try {
+      const data = [...this.plugins.entries()].map(([name, p]) => ({
+        name,
+        manifest: p.manifest,
+        path: p.path,
+        status: p.status,
+      }));
+      writeFileSync(PLUGINS_JSON, JSON.stringify(data, null, 2), "utf-8");
+    } catch {}
+  }
+
+  private loadFromDisk(): void {
+    try {
+      if (existsSync(PLUGINS_JSON)) {
+        const data = JSON.parse(readFileSync(PLUGINS_JSON, "utf-8"));
+        for (const item of data) {
+          this.plugins.set(item.name, {
+            manifest: item.manifest,
+            path: item.path,
+            module: {},
+            loadedAt: Date.now(),
+            status: item.status || "active",
+          });
+        }
+      }
+    } catch {}
   }
 }
 
 // ==================== シングルトン ====================
 
 export const pluginManager = new PluginManager();
+export default PluginManager;

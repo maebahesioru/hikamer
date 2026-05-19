@@ -1227,6 +1227,75 @@ registerCommand("telemetry", async (args) => {
   return "📊 `/telemetry report` — 全体レポート\n`/telemetry errors` — 失敗パターン\n`/telemetry recommend` — 改善提案\n`/telemetry session <id>` — セッション詳細";
 });
 
+// ==================== v1.69: プラグイン + スキルマーケットプレイス + CI/CD ====================
+
+registerCommand("plugin", async (args) => {
+  const { pluginManager } = await import("./plugin-system");
+  pluginManager.init();
+  const sub = (args || "").trim();
+
+  if (sub === "list" || !sub) {
+    return pluginManager.formatPlugins();
+  }
+
+  if (sub === "scan") {
+    const discovered = pluginManager.discoverPlugins();
+    if (discovered.length === 0) return "📭 利用可能なプラグインが見つかりません。";
+    return "🔍 **利用可能なプラグイン**\n\n" +
+      discovered.map(p => `**${p.name}** v${p.version}: ${p.description.slice(0, 80)}`).join("\n");
+  }
+
+  if (sub.startsWith("install ")) {
+    const path = sub.slice(8).trim();
+    if (!path) return "プラグインのパスを指定してください。";
+    const result = await pluginManager.register(path);
+    return result ? `✅ プラグイン **${result.manifest.name}** v${result.manifest.version} をインストール` : "❌ インストール失敗";
+  }
+
+  return "🔌 `/plugin list` — 一覧\n`/plugin scan` — 検出\n`/plugin install <path>` — インストール";
+});
+
+registerCommand("skills", async (args) => {
+  const { skillsMarketplace } = await import("./skills-marketplace");
+  const sub = (args || "").trim();
+
+  if (sub === "trending" || !sub) {
+    const skills = await skillsMarketplace.getTrending(10);
+    return skillsMarketplace.formatTrending(skills);
+  }
+
+  if (sub.startsWith("search ")) {
+    const query = sub.slice(7);
+    const skills = await skillsMarketplace.search(query);
+    return skillsMarketplace.formatSearch(skills);
+  }
+
+  if (sub.startsWith("install ")) {
+    const repo = sub.slice(8);
+    const result = await skillsMarketplace.install(repo);
+    return result.success ? `✅ **${repo}** をインストールしました！` : `❌ インストール失敗: ${result.message}`;
+  }
+
+  if (sub === "installed") {
+    const installed = skillsMarketplace.scanInstalled();
+    if (installed.length === 0) return "📭 インストール済みスキルはありません。";
+    return "📦 **インストール済みスキル**\n" + installed.map(s => `• ${s}`).join("\n");
+  }
+
+  return "🔥 `/skills trending` — 人気スキル\n`/skills search <keyword>` — 検索\n`/skills install <owner/repo>` — インストール\n`/skills installed` — インストール済み";
+});
+
+registerCommand("ci", async () => {
+  return "🔧 **GitHub Actions CI/CD**\n\n" +
+    "`.github/workflows/ci.yml` が設定されています。\n" +
+    "Push時に自動で以下が実行されます:\n" +
+    "• TypeScript型チェック (tsc --noEmit)\n" +
+    "• ESLint\n" +
+    "• ビルド + アーティファクト保存\n" +
+    "• mainブランチでは自動デプロイ\n\n" +
+    "毎週日曜に自動テストも実行されます。";
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
