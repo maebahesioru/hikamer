@@ -324,10 +324,10 @@ export function migrateOpenclawConfig(
  * hermes-agent形式: { jobs: [{ id, schedule, prompt, deliver, skills }] }
  * Aikata形式: SQLite scheduler_jobs テーブル
  */
-export function migrateHermesCron(
+export async function migrateHermesCron(
   jobsPath: string,
   dryRun: boolean = false,
-): { total: number; imported: number; skipped: number } {
+): Promise<{ total: number; imported: number; skipped: number }> {
   let total = 0;
   let imported = 0;
   let skipped = 0;
@@ -478,7 +478,7 @@ export async function migrateAll(
   // 4. Cron移行（hermes-agentのみ）
   if (source === "hermes-agent") {
     const jobsPath = join(srcPath, "cron", "jobs.json");
-    report.cron = migrateHermesCron(jobsPath, options?.dryRun);
+    report.cron = await migrateHermesCron(jobsPath, options?.dryRun);
   }
 
   report.durationMs = Date.now() - t0;

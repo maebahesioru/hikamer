@@ -17,6 +17,8 @@ interface WorkloadConfig {
   model?: string;
   /** プロバイダー（空ならデフォルト） */
   provider?: string;
+  /** クレデンシャルID（ModelRegistry連携用） */
+  credentialId?: string;
   maxTokens?: number;
   temperature?: number;
 }
