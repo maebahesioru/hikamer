@@ -13,6 +13,7 @@ import {
   logToolCall,
 } from "./repo";
 import { goalSystem, extractGoalContext } from "./goal-system";
+import { contextMonitor } from "./context-monitor";
 
 export interface AgentOptions {
   /** ストリーミング有効（デフォルトtrue） */
@@ -301,6 +302,22 @@ export async function agentLoop(
         })),
       ];
       saveMessages(conversationId, newMessages);
+
+      // v1.63: Context Monitor — GSDパターン
+      const ctxWarning = contextMonitor.afterToolCall(iterations, runtimeConfig.maxIterations);
+      if (ctxWarning) {
+        messages.push({ role: "user", content: ctxWarning });
+        // クリティカルなら強制終了
+        if (contextMonitor["currentLevel"] === "critical") {
+          logger.warn("[Agent] コンテキスト枯渇のため強制終了");
+          return {
+            response: `⚠️ コンテキストが枯渇しました（${iterations}反復）。\\n最終結果: ${partialContent || response.content || "(応答なし)"}`,
+            iterations,
+            toolLogs,
+            reasoning: allReasoning || undefined,
+          };
+        }
+      }
 
       // 割り込みチェック（長時間ツールからの帰還後）
       if (signal?.aborted) {

@@ -205,9 +205,13 @@ registerCommand("routes", async () => {
 
 registerCommand("context", async (args) => {
   const { contextManager } = await import("./context-manager");
+  const { contextMonitor } = await import("./context-monitor");
   if (args === "compress") {
     const result = contextManager.compress();
     return `✅ 圧縮完了: ${result.removedMessages}メッセージ削除, ${result.savedTokens}トークン節約`;
+  }
+  if (args === "monitor" || args === "ctx") {
+    return contextMonitor.formatStatus();
   }
   return contextManager.formatStats();
 });
@@ -1050,7 +1054,7 @@ registerCommand("strategy", async (args) => {
 
   if (sub === "force" || sub.startsWith("force ")) {
     const parts = sub.split(/\s+/);
-    const preset = parts[1] as StrategyPreset | undefined;
+    const preset = parts[1] as "speed" | "quality" | "balanced" | "cost-saving" | undefined;
     const validPresets = ["speed", "quality", "balanced", "cost-saving"];
     if (!preset || !validPresets.includes(preset)) {
       return `有効な戦略: ${validPresets.join(", ")}\n例: \`/strategy force speed\``;
@@ -1067,7 +1071,7 @@ registerCommand("strategy", async (args) => {
   }
 
   // デフォルト: 利用可能な戦略一覧
-  const presets: StrategyPreset[] = ["speed", "quality", "balanced", "cost-saving"];
+  const presets = ["speed", "quality", "balanced", "cost-saving"] as const;
   const emojis: Record<string, string> = { speed: "⚡", quality: "💎", balanced: "⚖️", "cost-saving": "💰" };
   return "🎯 **戦略セレクター** (Evolverパターン)\n\n" +
     presets.map(p => {
