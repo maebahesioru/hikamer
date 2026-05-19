@@ -621,3 +621,136 @@ export function suggestPromptImprovements(input: string, options?: {
     }),
   ].join("\n");
 }
+
+// ==========================================
+// Caveman Mode（JuliusBrussee/caveman 62k stars パターン）
+// AIの出力をcaveman調に圧縮。75%トークン削減。
+// システムプロンプト注入のみで実現。依存ゼロ。
+// ==========================================
+
+export type CavemanLevel = "lite" | "full" | "ultra" | "off";
+
+const CAVEMAN_PROMPTS: Record<Exclude<CavemanLevel, "off">, string> = {
+  lite: [
+    "Drop filler words (sure, I'd be happy to, let me).",
+    "Skip greetings and closings. Go straight to the answer.",
+    "Keep technical accuracy 100%. Just remove the fluff.",
+  ].join(" "),
+  full: [
+    "You are caveman. Brain still big. Mouth small.",
+    "Answer like this: 'Bug in X. Cause Y. Fix: Z'",
+    "No polite phrases. No explanations unless asked.",
+    "One sentence per point. Verb first. Subject drop ok.",
+    "Preserve ALL technical accuracy. Only cut words.",
+  ].join("\n"),
+  ultra: [
+    "Absolute minimum words. Telegraphic style.",
+    "Code blocks only when needed. No prose wrapping.",
+    "Commands not sentences. Facts not paragraphs.",
+    "Answer format: '<what>' not 'The issue is <what>'",
+  ].join("\n"),
+};
+
+/**
+ * caveman出力モードのシステムプロンプトを生成。
+ * 既存のシステムプロンプトの末尾に追加する。
+ */
+export function buildCavemanPrompt(level: CavemanLevel): string {
+  if (level === "off") return "";
+  const prompt = CAVEMAN_PROMPTS[level];
+  return `\n\n## Output Style: CAVEMAN (level: ${level})\n${prompt}\n\nRemember: same technical accuracy, 75% fewer words. Brain big. Mouth small.`;
+}
+
+/** cavemanレベルを文字列からパース */
+export function parseCavemanLevel(raw: string): CavemanLevel {
+  const r = raw.toLowerCase().trim();
+  if (r === "lite" || r === "light") return "lite";
+  if (r === "full" || r === "default" || r === "on" || r === "true") return "full";
+  if (r === "ultra" || r === "max" || r === "extreme") return "ultra";
+  return "off";
+}
+
+// ==========================================
+// PreCompact Snapshot + SessionStart Restore（claude-mem 76k stars パターン）
+// 会話圧縮前に重要なコンテキストをsnapshotとして保存し、
+// 新セッション開始時に復元。圧縮生存率を向上。
+// ==========================================
+
+export interface SessionSnapshot {
+  id: string;
+  createdAt: number;
+  compactedAt?: number;
+  /** 保存する重要情報 */
+  activeGoal?: string;
+  keyDecisions: string[];
+  unresolvedItems: string[];
+  fileState: { path: string; hash: string }[];
+  tokenCount: number;
+}
+
+/**
+ * 現在のセッション状態からスナップショットを作成。
+ * claude-memの PreCompact snapshot パターン。
+ */
+export function createSessionSnapshot(params: {
+  activeGoal?: string;
+  keyDecisions?: string[];
+  unresolvedItems?: string[];
+  fileHashes?: { path: string; hash: string }[];
+  tokenCount?: number;
+}): SessionSnapshot {
+  return {
+    id: `snap-${Date.now().toString(36)}`,
+    createdAt: Date.now(),
+    activeGoal: params.activeGoal,
+    keyDecisions: params.keyDecisions ?? [],
+    unresolvedItems: params.unresolvedItems ?? [],
+    fileState: params.fileHashes ?? [],
+    tokenCount: params.tokenCount ?? 0,
+  };
+}
+
+/**
+ * スナップショットから復元用のコンテキストブロックを生成。
+ * claude-memの SessionStart restore パターン。
+ * /clear 後にシステムプロンプトへ注入する。
+ */
+export function buildRestoreBlock(snapshot: SessionSnapshot): string {
+  const parts: string[] = ["[SESSION RESTORED — 前回の重要コンテキスト]"];
+
+  if (snapshot.activeGoal) {
+    parts.push(`🎯 アクティブゴール: ${snapshot.activeGoal}`);
+  }
+  if (snapshot.keyDecisions.length > 0) {
+    parts.push(`📋 決定事項:\n${snapshot.keyDecisions.map(d => `  - ${d}`).join("\n")}`);
+  }
+  if (snapshot.unresolvedItems.length > 0) {
+    parts.push(`⚠️ 未解決:\n${snapshot.unresolvedItems.map(i => `  - ${i}`).join("\n")}`);
+  }
+  if (snapshot.fileState.length > 0) {
+    parts.push(`📁 ファイル状態:\n${snapshot.fileState.map(f => `  - ${f.path}`).join("\n")}`);
+  }
+  parts.push(`(snapshot: ${snapshot.id}, tokens: ${snapshot.tokenCount})`);
+
+  return parts.join("\n");
+}
+
+/**
+ * AIによる観察の意味的要約（claude-mem AI summarization パターン）。
+ * 生のツール出力を受け取り、LLMに要約させるためのプロンプトを生成。
+ */
+export function buildSummarizePrompt(rawObservation: string, maxTokens: number = 200): string {
+  return [
+    "Summarize the following tool output. Keep ONLY:",
+    "- Key facts and numbers",
+    "- Errors or warnings",
+    "- Decisions made",
+    "- Actionable next steps",
+    "",
+    "Drop: logs, stack traces (unless critical), redundant lines, boilerplate.",
+    `Keep under ${maxTokens} tokens.`,
+    "",
+    "=== RAW OUTPUT ===",
+    rawObservation.slice(0, 5000),
+  ].join("\n");
+}
