@@ -1051,3 +1051,283 @@ export function adaptiveCutoff(
     method: "none",
   };
 }
+
+// ==========================================
+// コード知識グラフ（code-review-graph 17k stars パターン）
+// コードベースの依存関係グラフを構築し、
+// レビュー時に必要なファイルだけを抽出（6.8xトークン削減）
+// ==========================================
+
+export interface CodeNode {
+  path: string;
+  imports: string[];
+  exportedBy: string[];
+  symbols: string[];      // エクスポートされた関数/クラス名
+  dependencies: string[];  // 依存するファイルパス
+  dependents: string[];    // このファイルに依存するファイル
+  size: number;
+}
+
+export interface CodeGraph {
+  nodes: Map<string, CodeNode>;
+  rootDir: string;
+}
+
+/**
+ * コードベースから依存関係グラフを構築。
+ * import/export文をパースしてノード間のエッジを作成。
+ */
+export function buildCodeGraph(
+  files: { path: string; content: string }[],
+  rootDir: string,
+): CodeGraph {
+  const nodes = new Map<string, CodeNode>();
+
+  // パス正規化
+  for (const file of files) {
+    const imports = extractImports(file.content);
+    const symbols = extractExports(file.content);
+    nodes.set(file.path, {
+      path: file.path,
+      imports,
+      exportedBy: [],
+      symbols,
+      dependencies: [],
+      dependents: [],
+      size: file.content.length,
+    });
+  }
+
+  // 依存関係を解決
+  for (const [path, node] of nodes) {
+    for (const imp of node.imports) {
+      const resolved = resolveImport(imp, path, nodes);
+      if (resolved) {
+        node.dependencies.push(resolved);
+        const dep = nodes.get(resolved);
+        if (dep) dep.dependents.push(path);
+      }
+    }
+  }
+
+  return { nodes, rootDir };
+}
+
+/**
+ * 特定のファイルに関連するファイル群を取得。
+ * code-review-graphの「必要なファイルだけ読む」パターン。
+ * 
+ * depth=1: 直接の依存+被依存だけ
+ * depth=2: 間接的な依存関係も含む
+ */
+export function getRelevantFiles(
+  graph: CodeGraph,
+  targetPath: string,
+  depth: number = 1,
+): string[] {
+  const visited = new Set<string>();
+  const queue: { path: string; d: number }[] = [{ path: targetPath, d: 0 }];
+  const result: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current.path)) continue;
+    visited.add(current.path);
+    result.push(current.path);
+
+    if (current.d >= depth) continue;
+
+    const node = graph.nodes.get(current.path);
+    if (!node) continue;
+
+    for (const dep of node.dependencies) {
+      if (!visited.has(dep)) queue.push({ path: dep, d: current.d + 1 });
+    }
+    for (const dep of node.dependents) {
+      if (!visited.has(dep)) queue.push({ path: dep, d: current.d + 1 });
+    }
+  }
+
+  return result;
+}
+
+/** import文を抽出（TS/JS/Python対応） */
+function extractImports(content: string): string[] {
+  const imports: string[] = [];
+  // TypeScript/JavaScript
+  for (const m of content.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+    imports.push(m[1]!);
+  }
+  for (const m of content.matchAll(/import\s+['"]([^'"]+)['"]/g)) {
+    imports.push(m[1]!);
+  }
+  // Python
+  for (const m of content.matchAll(/^(?:from|import)\s+(\S+)/gm)) {
+    imports.push(m[1]!);
+  }
+  return [...new Set(imports)];
+}
+
+/** エクスポートされたシンボルを抽出 */
+function extractExports(content: string): string[] {
+  const symbols: string[] = [];
+  for (const m of content.matchAll(/export\s+(?:const|function|class|interface|type|enum)\s+(\w+)/g)) {
+    symbols.push(m[1]!);
+  }
+  return symbols;
+}
+
+/** importパスをファイルパスに解決 */
+function resolveImport(
+  importPath: string,
+  fromFile: string,
+  nodes: Map<string, CodeNode>,
+): string | null {
+  // 相対パス
+  if (importPath.startsWith(".")) {
+    const dir = fromFile.split("/").slice(0, -1).join("/");
+    const resolved = (dir ? dir + "/" : "") + importPath;
+    // 拡張子の試行
+    for (const ext of ["", ".ts", ".tsx", ".js", ".jsx", ".py"]) {
+      const candidate = resolved + ext;
+      if (nodes.has(candidate)) return candidate;
+      // index.ts も試す
+      const indexCandidate = resolved + "/index" + ext;
+      if (nodes.has(indexCandidate)) return indexCandidate;
+    }
+    return null;
+  }
+  // 絶対パス（パッケージ名）は解決不能 → null
+  return null;
+}
+
+// ==========================================
+// 深層リサーチパイプライン（local-deep-research 8k stars パターン）
+// 複数検索エンジンでの並行検索→結果集約→AI要約
+// ==========================================
+
+export interface ResearchSource {
+  url: string;
+  title: string;
+  snippet: string;
+  engine: string;
+  score: number;
+}
+
+export interface ResearchReport {
+  query: string;
+  sources: ResearchSource[];
+  summary: string;
+  searchDurationMs: number;
+  enginesUsed: string[];
+}
+
+/**
+ * 複数検索エンジンで並行検索し、結果を集約。
+ * local-deep-researchの multi-engine search パターン。
+ * 10+ search engines: SearXNG, Google, arXiv, PubMed, etc.
+ */
+export async function multiEngineSearch(
+  query: string,
+  options?: {
+    engines?: string[];
+    maxResults?: number;
+    deduplicate?: boolean;
+  },
+): Promise<ResearchSource[]> {
+  const engines = options?.engines ?? ["google", "arxiv", "wikipedia"];
+  const maxResults = options?.maxResults ?? 10;
+  const deduplicate = options?.deduplicate ?? true;
+  const t0 = Date.now();
+
+  // 並行検索（local-deep-research: 全エンジン同時に叩く）
+  const searches = engines.map(async (engine) => {
+    try {
+      const results = await searchEngine(engine, query, maxResults);
+      return results.map(r => ({ ...r, engine }));
+    } catch {
+      return [];
+    }
+  });
+
+  const allResults = (await Promise.all(searches)).flat();
+
+  // 重複除去（URL正規化）
+  let deduped = allResults;
+  if (deduplicate) {
+    const seen = new Set<string>();
+    deduped = allResults.filter(r => {
+      const key = normalizeURL(r.url);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  // スコアでソート
+  deduped.sort((a, b) => b.score - a.score);
+
+  const duration = Date.now() - t0;
+  logger.info(`[MultiEngineSearch] ${engines.length} engines, ${allResults.length} raw → ${deduped.length} deduped, ${duration}ms`);
+
+  return deduped.slice(0, maxResults);
+}
+
+/** 検索エンジン個別の実装 */
+async function searchEngine(
+  engine: string,
+  query: string,
+  limit: number,
+): Promise<{ url: string; title: string; snippet: string; score: number }[]> {
+  // SearXNG経由（local-deep-researchのデフォルト）
+  const searxngUrl = process.env.SEARXNG_URL || "http://localhost:18080";
+  const encodedQuery = encodeURIComponent(query);
+  const engineParam = engine === "google" ? "" : `&engines=${engine}`;
+
+  try {
+    const res = await fetch(
+      `${searxngUrl}/search?q=${encodedQuery}&format=json&categories=general${engineParam}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json() as {
+      results?: { url: string; title: string; content: string; score: number }[];
+    };
+
+    return (data.results ?? []).slice(0, limit).map(r => ({
+      url: r.url,
+      title: r.title,
+      snippet: r.content?.slice(0, 300) ?? "",
+      score: r.score ?? 0.5,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeURL(url: string): string {
+  return url
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "")
+    .replace(/^www\./, "")
+    .toLowerCase();
+}
+
+/**
+ * AI-Scientist (14k stars) アイデア生成→実験→論文執筆ループの
+ * 簡易版。検索結果からリサーチレポートを生成。
+ */
+export function buildResearchReport(
+  query: string,
+  sources: ResearchSource[],
+): ResearchReport {
+  return {
+    query,
+    sources,
+    summary: "", // LLMで埋める想定
+    searchDurationMs: 0,
+    enginesUsed: [...new Set(sources.map(s => s.engine))],
+  };
+}
