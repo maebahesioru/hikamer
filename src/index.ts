@@ -1111,6 +1111,35 @@ registerCommand("biz", async (args) => {
   return "📋 不明なサブコマンド。`/biz help` で一覧表示。";
 });
 
+// ==================== v1.65: エンティティグラフ（LightRAGパターン） ====================
+
+registerCommand("graph", async (args) => {
+  const { entityGraph } = await import("./entity-extractor");
+  const sub = (args || "").trim().toLowerCase();
+
+  if (sub === "stats" || !sub) {
+    return entityGraph.formatStats() + "\n\n`/graph search <keyword>` — エンティティ検索\n`/graph extract <text>` — テキストから抽出";
+  }
+
+  if (sub.startsWith("search ")) {
+    const query = sub.slice(7);
+    if (!query) return "検索キーワードを指定してください。";
+    const entities = entityGraph.searchEntities(query, 10);
+    if (entities.length === 0) return "🔍 該当するエンティティが見つかりませんでした。";
+    return `🕸️ **エンティティ検索**: "${query}"\n\n${entities.map(e => entityGraph.formatEntity(e)).join("\n\n")}`;
+  }
+
+  if (sub.startsWith("extract ")) {
+    const text = args!.slice(8);
+    if (!text) return "抽出するテキストを指定してください。";
+    const result = entityGraph.extractKeywords(text);
+    return `✅ 抽出完了: ${result.entities.length}エンティティ, ${result.relations.length}関係\n\n` +
+      `**エンティティ**: ${result.entities.map(e => e.name).join(", ") || "(なし)"}`;
+  }
+
+  return entityGraph.formatStats();
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
