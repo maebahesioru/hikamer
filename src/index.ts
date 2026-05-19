@@ -1296,6 +1296,80 @@ registerCommand("ci", async () => {
     "毎週日曜に自動テストも実行されます。";
 });
 
+// ==================== v1.70: マルチモーダル入力（画像認識 + 音声文字起こし） ====================
+
+registerCommand("vision", async (args) => {
+  const { multiModal } = await import("./multimodal");
+  const sub = (args || "").trim();
+
+  if (!sub || sub === "help") {
+    return "🖼️ **マルチモーダル入力**\n\n" +
+      "`/vision file <パス>` — 画像ファイルを読み込み\n" +
+      "`/vision url <URL>` — URLから画像を読み込み\n" +
+      "`/vision info <パス>` — 画像のメタデータ表示\n" +
+      "`/transcribe <パス>` — 音声を文字起こし";
+  }
+
+  if (sub.startsWith("file ")) {
+    const path = sub.slice(5);
+    try {
+      const image = await multiModal.loadImage(path, false);
+      const meta = multiModal.analyzeImageMetadata(image);
+      return multiModal.formatMetadata(meta) +
+        `\n\n✅ 画像を読み込みました。この画像について質問してください。` +
+        `\nbase64長: ${image.base64?.length.toLocaleString() || "N/A"}文字`;
+    } catch (e: any) {
+      return `❌ ${e.message}`;
+    }
+  }
+
+  if (sub.startsWith("url ")) {
+    const url = sub.slice(4);
+    try {
+      const image = await multiModal.loadImage(url, true);
+      const meta = multiModal.analyzeImageMetadata(image);
+      return multiModal.formatMetadata(meta) +
+        `\n\n✅ URLから画像を読み込みました。` +
+        `\nソース: ${url}`;
+    } catch (e: any) {
+      return `❌ ${e.message}`;
+    }
+  }
+
+  if (sub.startsWith("info ")) {
+    const path = sub.slice(5);
+    try {
+      const image = await multiModal.loadImage(path, false);
+      const meta = multiModal.analyzeImageMetadata(image);
+      const validation = multiModal.validateImage(image);
+      return multiModal.formatMetadata(meta) +
+        `\n検証: ${validation.valid ? "✅ 有効" : "❌ " + validation.reason}`;
+    } catch (e: any) {
+      return `❌ ${e.message}`;
+    }
+  }
+
+  return "🖼️ `/vision file <パス>` `/vision url <URL>` `/vision info <パス>`";
+});
+
+registerCommand("transcribe", async (args) => {
+  const { multiModal } = await import("./multimodal");
+  const path = (args || "").trim();
+
+  if (!path) return "🎤 **音声文字起こし**\n`/transcribe <音声ファイルのパス>`\n対応形式: MP3, WAV, OGG, FLAC, AAC, Opus\n※ whisper.cpp が必要です";
+
+  try {
+    const audio = await multiModal.loadAudio(path);
+    const result = await multiModal.transcribe(audio);
+    if (result.confidence > 0) {
+      return `🎤 **文字起こし結果** (${result.language || "auto"})\n\n${result.text}\n\n信頼度: ${(result.confidence * 100).toFixed(0)}%`;
+    }
+    return `⚠️ 文字起こしに失敗しました。whisper.cppがインストールされていますか？\n音声ファイル: ${(audio.sizeBytes / 1024).toFixed(1)}KB`;
+  } catch (e: any) {
+    return `❌ ${e.message}`;
+  }
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
