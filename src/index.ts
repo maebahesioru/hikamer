@@ -1181,6 +1181,18 @@ registerCommand("soul", async (args) => {
   return soulManager.formatProfile() + "\n\n`/soul name=<名前>` `/soul tone=<tone>` `/soul reset`";
 });
 
+// ==================== v1.67: エラーリカバリー（ai-agent-error-patterns） ====================
+
+registerCommand("circuit", async () => {
+  const { circuitBreaker } = await import("./error-recovery");
+  return circuitBreaker.formatStatus();
+});
+
+registerCommand("pending", async () => {
+  const { humanInTheLoop } = await import("./error-recovery");
+  return humanInTheLoop.formatPending();
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
