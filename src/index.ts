@@ -1140,6 +1140,47 @@ registerCommand("graph", async (args) => {
   return entityGraph.formatStats();
 });
 
+// ==================== v1.66: SOULシステム（soul.md + gstackパターン） ====================
+
+registerCommand("soul", async (args) => {
+  const { soulManager } = await import("./soul");
+  soulManager.init();
+  const sub = (args || "").trim();
+
+  if (!sub || sub === "show") {
+    return soulManager.formatProfile();
+  }
+
+  if (sub === "reset") {
+    soulManager.reset();
+    return "🔄 人格をデフォルトにリセットしました。";
+  }
+
+  if (sub.includes("=")) {
+    const eqIdx = sub.indexOf("=");
+    const key = sub.slice(0, eqIdx).trim();
+    const value = sub.slice(eqIdx + 1).trim();
+
+    const patch: Record<string, any> = {};
+    if (key === "tone") patch.communication = { ...soulManager.getProfile().communication, tone: value };
+    else if (key === "formality") patch.communication = { ...soulManager.getProfile().communication, formality: parseInt(value) || 3 };
+    else if (key === "emoji") patch.communication = { ...soulManager.getProfile().communication, emojiUsage: value };
+    else if (key === "name") patch.name = value;
+    else if (key === "pronoun") patch.pronoun = value;
+    else return `不明なキー: ${key}\n編集可能: name, pronoun, tone, formality, emoji`;
+
+    if (patch.communication) {
+      const current = soulManager.getProfile().communication;
+      patch.communication = { ...current, ...(typeof patch.communication === "object" ? patch.communication : {}) };
+    }
+
+    soulManager.updateProfile(patch as any);
+    return `✅ 人格を更新: **${key}** = ${value}\n\n${soulManager.formatProfile()}`;
+  }
+
+  return soulManager.formatProfile() + "\n\n`/soul name=<名前>` `/soul tone=<tone>` `/soul reset`";
+});
+
 // ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
 
 registerCommand("strategy", async (args) => {
