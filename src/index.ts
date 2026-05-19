@@ -1038,6 +1038,45 @@ registerCommand("invest", async (args) => {
   return "📋 不明なサブコマンド。`/invest help` で一覧表示。";
 });
 
+// ==================== v1.62: 戦略セレクター（Evolverパターン） ====================
+
+registerCommand("strategy", async (args) => {
+  const { strategySelector } = await import("./strategy-selector");
+  const sub = (args || "").trim().toLowerCase();
+
+  if (sub === "stats" || sub === "status") {
+    return strategySelector.formatStats();
+  }
+
+  if (sub === "force" || sub.startsWith("force ")) {
+    const parts = sub.split(/\s+/);
+    const preset = parts[1] as StrategyPreset | undefined;
+    const validPresets = ["speed", "quality", "balanced", "cost-saving"];
+    if (!preset || !validPresets.includes(preset)) {
+      return `有効な戦略: ${validPresets.join(", ")}\n例: \`/strategy force speed\``;
+    }
+    const config = strategySelector.force(preset);
+    return `✅ 戦略を強制設定: **${preset}**\n最大反復: ${config.maxIterations} | 思考: ${config.thinking ? "有効" : "無効"} | 並列: ${config.allowParallel ? "許可" : "禁止"} | 再試行: ${config.retries}回`;
+  }
+
+  if (sub.startsWith("test ") || sub.startsWith("select ")) {
+    const task = sub.replace(/^(test|select)\s+/, "");
+    if (!task) return "分析するタスク内容を指定してください。\n例: `/strategy test debug production error`";
+    const match = strategySelector.select(task);
+    return `🎯 **戦略分析**\nタスク: "${task.slice(0, 100)}"\n選択: **${match.config.preset}** (信頼度: ${match.confidence}%)\n理由: ${match.reason}\n\n設定: 最大${match.config.maxIterations}反復 | 思考${match.config.thinking ? "有効" : "無効"} | 並列${match.config.allowParallel ? "許可" : "禁止"} | 再試行${match.config.retries}回`;
+  }
+
+  // デフォルト: 利用可能な戦略一覧
+  const presets: StrategyPreset[] = ["speed", "quality", "balanced", "cost-saving"];
+  const emojis: Record<string, string> = { speed: "⚡", quality: "💎", balanced: "⚖️", "cost-saving": "💰" };
+  return "🎯 **戦略セレクター** (Evolverパターン)\n\n" +
+    presets.map(p => {
+      const c = strategySelector.force(p);
+      return `${emojis[p]} **${p}**: 最大${c.maxIterations}反復 | 思考${c.thinking ? "○" : "×"} | 並列${c.allowParallel ? "○" : "×"} | 再試行${c.retries}回`;
+    }).join("\n") +
+    "\n\n`/strategy test <タスク>` — 最適戦略を分析\n`/strategy stats` — 統計\n`/strategy force <戦略>` — 強制設定";
+});
+
 // ==================== メッセージプリプロセッサ ====================
 
 /**
