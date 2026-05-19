@@ -754,3 +754,180 @@ export function buildSummarizePrompt(rawObservation: string, maxTokens: number =
     rawObservation.slice(0, 5000),
   ].join("\n");
 }
+
+// ==========================================
+// Anti-Slop 禁止パターン（taste-skill 18k stars パターン）
+// AIが統計的に生成しがちな凡庸パターンを明示禁止。
+// システムプロンプトに注入してデザイン品質を向上。
+// ==========================================
+
+const ANTI_SLOP_RULES = [
+  // Typography
+  "NEVER use Inter font. Use system font stack or project-specified fonts.",
+  "NEVER use AI-purple (#7C3AED, #8B5CF6) gradients.",
+  "NEVER use blue-purple gradient text on dark backgrounds.",
+  // Layout
+  "NEVER use 3-column card grids as default layout.",
+  "NEVER center-align hero text. Left-align or asymmetric.",
+  "NEVER use generic emoji as section icons (🚀, ⭐, 💡, 🔥).",
+  // Design
+  "NEVER use glassmorphism (backdrop-blur translucent cards).",
+  "NEVER use cookie-cutter SaaS landing page layouts.",
+  "NEVER generate dark-mode-only designs without asking.",
+  // Animation
+  "Animate ONLY transform and opacity. NEVER animate width/height/color.",
+  // Code
+  "NEVER use placeholder comments (// TODO, // FIXME without details).",
+  "NEVER use console.log without explaining what and why.",
+  "NEVER import React.useState when useMotionValue is project standard.",
+];
+
+/**
+ * Anti-Slopルールを含むシステムプロンプトを生成。
+ * taste-skillの「禁止パターン明示」戦略。
+ */
+export function buildAntiSlopPrompt(): string {
+  return [
+    "",
+    "## 🚫 Anti-Slop Rules (taste-skill)",
+    "The following patterns are FORBIDDEN. They are statistically generic AI output — not good design:",
+    "",
+    ...ANTI_SLOP_RULES.map(r => `- ${r}`),
+    "",
+    "Be creative. Be specific. Be intentional. If the result looks like it could come from any AI, it's wrong.",
+  ].join("\n");
+}
+
+// ==========================================
+// Grill-Me 対話型詰めセッション（mattpocock/skills 93k stars パターン）
+// 一次に1問だけ質問し、計画の設計木を段階的に解決。
+// ==========================================
+
+export interface GrillSession {
+  /** セッション状態 */
+  phase: "initial" | "questioning" | "resolved" | "done";
+  /** 累積質問数 */
+  questionCount: number;
+  /** 解決済みの疑問 */
+  resolved: { question: string; answer: string }[];
+  /** 残っている未解決の疑問 */
+  unresolved: string[];
+  /** 信頼度（0-100） */
+  confidence: number;
+}
+
+/**
+ * Grill-Meセッションの次の質問を生成。
+ * mattpocockの /grill-me コマンドに相当。
+ * 
+ * 使い方: ユーザーの曖昧な指示を受け、
+ * 「これが現在の理解だが、ここが不明瞭だ。これで合ってるか？」
+ * という形で1問だけ質問する。
+ */
+export function buildGrillQuestion(
+  userIntent: string,
+  session: GrillSession,
+): string {
+  if (session.phase === "done") {
+    return "✅ All questions resolved. Ready to implement.";
+  }
+
+  if (session.unresolved.length > 0) {
+    const next = session.unresolved[0]!;
+    return [
+      `🎯 **Question ${session.questionCount + 1}**`,
+      ``,
+      `Based on your intent: "${userIntent.slice(0, 200)}"`,
+      ``,
+      `I need to clarify: **${next}**`,
+      ``,
+      `My current understanding is: (explain what you think the answer is)`,
+      `Is this correct? If not, what should it be?`,
+    ].join("\n");
+  }
+
+  // 初回: 意図の再確認
+  return [
+    `🎯 **Let me confirm my understanding**`,
+    ``,
+    `You want: ${userIntent.slice(0, 200)}`,
+    ``,
+    `Here's what I'm assuming:`,
+    `1. (assumption 1)`,
+    `2. (assumption 2)`,
+    ``,
+    `Before I proceed, is this correct? What's missing?`,
+  ].join("\n");
+}
+
+/**
+ * ユーザー回答からグリルセッションを更新。
+ * 信頼度が95%を超えたら done に遷移。
+ */
+export function updateGrillSession(
+  session: GrillSession,
+  userAnswer: string,
+): GrillSession {
+  const updated = { ...session, questionCount: session.questionCount + 1 };
+
+  if (session.unresolved.length > 0) {
+    const [answered, ...rest] = session.unresolved;
+    updated.resolved = [...session.resolved, { question: answered!, answer: userAnswer }];
+    updated.unresolved = rest;
+  }
+
+  // 全疑問が解決したらdone
+  if (updated.unresolved.length === 0) {
+    updated.confidence = 100;
+    updated.phase = "done";
+  } else {
+    // 解決済み数から信頼度を推定
+    updated.confidence = Math.min(95, Math.round(
+      (updated.resolved.length / (updated.resolved.length + updated.unresolved.length)) * 100
+    ));
+    updated.phase = updated.confidence >= 95 ? "done" : "questioning";
+  }
+
+  return updated;
+}
+
+/**
+ * 新しいGrill-Meセッションを開始。
+ * ユーザーの意図から自動的に未解決の疑問を抽出。
+ */
+export function startGrillSession(userIntent: string): GrillSession {
+  // 意図から抽出した疑似的な未解決疑問
+  const unresolved = extractUnknowns(userIntent);
+  return {
+    phase: unresolved.length > 0 ? "questioning" : "done",
+    questionCount: 0,
+    resolved: [],
+    unresolved,
+    confidence: unresolved.length > 0 ? 30 : 95,
+  };
+}
+
+/** 曖昧な指示から未解決の疑問を抽出 */
+function extractUnknowns(intent: string): string[] {
+  const unknowns: string[] = [];
+  const lower = intent.toLowerCase();
+
+  // スタック・フレームワークが指定されていない
+  if (!/(react|vue|svelte|next|nuxt|express|fastify|django|flask|rails)/i.test(lower)) {
+    unknowns.push("What tech stack/framework should be used?");
+  }
+  // UIライブラリが指定されていない
+  if (!/(tailwind|css|styled|material|chakra|shadcn)/i.test(lower)) {
+    unknowns.push("What styling approach? (Tailwind, CSS modules, styled-components, etc.)");
+  }
+  // デプロイ先が指定されていない
+  if (!/(deploy|vercel|netlify|aws|cloudflare|docker|fly)/i.test(lower)) {
+    unknowns.push("Where will this be deployed?");
+  }
+  // 対象ユーザーが不明
+  if (!/(user|admin|customer|developer|internal|public)/i.test(lower)) {
+    unknowns.push("Who is the target user?");
+  }
+
+  return unknowns;
+}
