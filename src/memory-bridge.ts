@@ -733,3 +733,137 @@ class MemoryLifecycle {
 }
 
 export const memoryLifecycle = new MemoryLifecycle();
+
+// ==========================================
+// Beads-style Hash ID + Graph Memory（gastownhall/beads 24k stars パターン）
+// Dolt-powered分散グラフ課題追跡のTypeScript移植。
+// ハッシュベースID + 依存グラフ + メモリ減衰
+// ==========================================
+
+export interface GraphTask {
+  /** ハッシュベースID (beads: bd-a1b2 形式) */
+  id: string;
+  title: string;
+  status: "todo" | "in_progress" | "done" | "closed";
+  /** 依存するタスクID */
+  dependencies: string[];
+  /** このタスクに依存するタスクID */
+  dependents: string[];
+  /** グラフリンク */
+  relatesTo: string[];
+  duplicates: string[];
+  supersedes: string[];
+  /** 作成時刻 */
+  createdAt: number;
+  /** 閉鎖時刻（メモリ減衰の計算に使用） */
+  closedAt?: number;
+  /** 重要度（0-1）。減衰時に高いものが残る */
+  importance: number;
+  /** メモリ使用量の見積もり（bytes） */
+  estimatedBytes: number;
+}
+
+/**
+ * ハッシュベースの一意なタスクIDを生成。
+ * beadsの "bd-a1b2" 形式: prefix + タイムスタンプ + ランダム
+ * マルチエージェント/マルチブランチのマージ衝突を防止。
+ */
+export function generateBeadsID(prefix: string = "mem"): string {
+  const ts = Date.now().toString(36).slice(-4);
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `${prefix}-${ts}${rand}`;
+}
+
+/**
+ * 依存関係グラフから実行可能なタスク（全依存がdoneのもの）を検出。
+ * beadsの auto-ready task detection 相当。
+ */
+export function findReadyTasks(tasks: GraphTask[]): GraphTask[] {
+  return tasks.filter(t =>
+    t.status === "todo" &&
+    t.dependencies.every(depId =>
+      tasks.find(d => d.id === depId)?.status === "done"
+    )
+  );
+}
+
+/**
+ * メモリ減衰（beads: semantic "memory decay"）。
+ * 古いclosedタスクを要約してトークン節約。
+ * 
+ * @param tasks 全タスク
+ * @param maxAgeMs この時間より古いclosedタスクを減衰対象に
+ * @returns { kept: 残すタスク, decayed: 要約されたタスクの概要 }
+ */
+export function decayOldTasks(
+  tasks: GraphTask[],
+  maxAgeMs: number = 7 * 24 * 60 * 60 * 1000, // 7日
+): { kept: GraphTask[]; decayedSummary: string } {
+  const now = Date.now();
+  const kept: GraphTask[] = [];
+  const decayed: GraphTask[] = [];
+
+  for (const task of tasks) {
+    if (
+      task.status === "closed" &&
+      task.closedAt &&
+      (now - task.closedAt) > maxAgeMs &&
+      task.importance < 0.5
+    ) {
+      decayed.push(task);
+    } else {
+      kept.push(task);
+    }
+  }
+
+  const decayedSummary = decayed.length > 0
+    ? `[Memory Decay] ${decayed.length} old tasks summarized: ${decayed.map(t => t.title).join(", ").slice(0, 200)}`
+    : "";
+
+  return { kept, decayedSummary };
+}
+
+/**
+ * グラフリンクの構築。
+ * beadsの relates_to / duplicates / supersedes 関係を設定。
+ */
+export function linkGraphTasks(
+  tasks: GraphTask[],
+  fromId: string,
+  toId: string,
+  relation: "relates_to" | "duplicates" | "supersedes",
+): void {
+  const from = tasks.find(t => t.id === fromId);
+  const to = tasks.find(t => t.id === toId);
+  if (!from || !to) return;
+
+  switch (relation) {
+    case "relates_to":
+      if (!from.relatesTo.includes(toId)) from.relatesTo.push(toId);
+      break;
+    case "duplicates":
+      if (!from.duplicates.includes(toId)) from.duplicates.push(toId);
+      break;
+    case "supersedes":
+      if (!from.supersedes.includes(toId)) from.supersedes.push(toId);
+      break;
+  }
+}
+
+/**
+ * タスクをbeads形式のJSONとして永続化するためのシリアライズ。
+ */
+export function serializeGraphTasks(tasks: GraphTask[]): string {
+  return JSON.stringify(tasks, null, 2);
+}
+
+/**
+ * beads形式のJSONからタスクを復元。
+ */
+export function deserializeGraphTasks(json: string): GraphTask[] {
+  try {
+    return JSON.parse(json) as GraphTask[];
+  } catch {
+    return [];
+  }
+}
