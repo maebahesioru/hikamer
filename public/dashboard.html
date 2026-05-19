@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aikata Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:20px;color:#58a6ff}
+.status-dot{width:10px;height:10px;border-radius:50%;background:#3fb950;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;padding:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px}
+.card h3{font-size:14px;color:#8b949e;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+.stat-value{font-size:32px;font-weight:700}
+.stat-label{font-size:12px;color:#8b949e;margin-top:4px}
+.green{color:#3fb950}.yellow{color:#d29922}.red{color:#f85149}.blue{color:#58a6ff}
+.bar{height:8px;border-radius:4px;background:#21262d;margin-top:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width .5s}
+.bar-fill.green{background:#3fb950}.bar-fill.yellow{background:#d29922}.bar-fill.red{background:#f85149}
+.session-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #21262d}
+.session-row:last-child{border-bottom:none}
+.session-id{font-family:monospace;font-size:12px;color:#8b949e}
+.session-stats{font-size:12px}
+.tool-tag{display:inline-block;background:#1f6feb22;color:#58a6ff;padding:2px 8px;border-radius:12px;font-size:11px;margin:2px}
+.error-item{background:#f8514922;border-left:3px solid #f85149;padding:8px 12px;margin:8px 0;border-radius:0 4px 4px 0;font-size:12px}
+.error-count{color:#f85149;font-weight:700}
+.section{margin-top:24px}
+.footer{text-align:center;padding:16px;color:#484f58;font-size:11px}
+.connected{color:#3fb950}.disconnected{color:#f85149}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="status-dot" id="statusDot"></div>
+  <h1>Aikata Dashboard</h1>
+  <span style="font-size:12px;color:#8b949e" id="connStatus">接続中...</span>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>📊 総セッション数</h3>
+    <div id="totalSessions" class="stat-value blue">--</div>
+    <div class="stat-label">セッション</div>
+  </div>
+  <div class="card">
+    <h3>🔄 総ターン数</h3>
+    <div id="totalTurns" class="stat-value green">--</div>
+    <div class="stat-label">ターン</div>
+  </div>
+  <div class="card">
+    <h3>✅ 成功率</h3>
+    <div id="successRate" class="stat-value green">--%</div>
+    <div class="bar"><div id="successBar" class="bar-fill green" style="width:0%"></div></div>
+  </div>
+  <div class="card">
+    <h3>💰 総コスト</h3>
+    <div id="totalCost" class="stat-value yellow">$--</div>
+    <div class="stat-label">USD</div>
+  </div>
+  <div class="card">
+    <h3>🧠 総トークン</h3>
+    <div id="totalTokens" class="stat-value blue">--</div>
+    <div class="stat-label">トークン</div>
+  </div>
+  <div class="card">
+    <h3>📈 平均ターン/セッション</h3>
+    <div id="avgTurns" class="stat-value green">--</div>
+    <div class="stat-label">ターン/セッション</div>
+  </div>
+</div>
+
+<div class="grid" style="padding-top:0">
+  <div class="card" style="grid-column:span 2">
+    <h3>📋 最近のセッション</h3>
+    <div id="sessions"></div>
+  </div>
+  <div class="card">
+    <h3>⚠️ 失敗パターン</h3>
+    <div id="failures"></div>
+  </div>
+</div>
+
+<div class="footer">Aikata v1.71 · WebSocket: ws://localhost:9722 · 自動更新</div>
+
+<script>
+const WS_URL = `ws://${location.hostname}:9722`;
+let ws;
+
+function connect(){
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById('statusDot').style.background = '#3fb950';
+    document.getElementById('connStatus').textContent = '接続中';
+    document.getElementById('connStatus').className = 'connected';
+  };
+  ws.onclose = () => {
+    document.getElementById('statusDot').style.background = '#f85149';
+    document.getElementById('connStatus').textContent = '切断';
+    document.getElementById('connStatus').className = 'disconnected';
+    setTimeout(connect, 3000);
+  };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'telemetry') updateDashboard(msg);
+    } catch {}
+  };
+}
+
+function updateDashboard(msg){
+  const g = msg.report?.global;
+  if (!g) return;
+
+  document.getElementById('totalSessions').textContent = g.totalSessions;
+  document.getElementById('totalTurns').textContent = g.totalTurns.toLocaleString();
+  document.getElementById('successRate').textContent = g.overallSuccessRate.toFixed(1) + '%';
+  document.getElementById('totalCost').textContent = '$' + g.totalCost.toFixed(4);
+  document.getElementById('totalTokens').textContent = (g.totalTokens / 1000).toFixed(0) + 'K';
+  document.getElementById('avgTurns').textContent = g.avgTurnsPerSession.toFixed(1);
+
+  const bar = document.getElementById('successBar');
+  bar.style.width = g.overallSuccessRate + '%';
+  bar.className = 'bar-fill ' + (g.overallSuccessRate >= 80 ? 'green' : g.overallSuccessRate >= 50 ? 'yellow' : 'red');
+
+  // セッション一覧
+  const sessionsDiv = document.getElementById('sessions');
+  const sessions = msg.report?.sessions || [];
+  sessionsDiv.innerHTML = sessions.slice(0, 10).map(s => {
+    const icon = s.successRate >= 80 ? '🟢' : s.successRate >= 50 ? '🟡' : '🔴';
+    const tools = (s.topTools || []).map(t => `<span class="tool-tag">${t.name}×${t.count}</span>`).join('');
+    const duration = s.totalDurationMs > 60000 ? (s.totalDurationMs/60000).toFixed(1)+'分' : (s.totalDurationMs/1000).toFixed(1)+'秒';
+    return `<div class="session-row">
+      <div><span class="session-id">${icon} ${s.sessionId.slice(0,12)}</span></div>
+      <div class="session-stats">${s.totalTurns}ターン · ${duration} · ${s.successRate.toFixed(0)}% · $${s.totalCost.toFixed(4)}</div>
+      <div>${tools}</div>
+    </div>`;
+  }).join('') || '<div style="color:#8b949e">セッションデータなし</div>';
+
+  // 失敗パターン
+  const failuresDiv = document.getElementById('failures');
+  const failures = msg.failures || [];
+  failuresDiv.innerHTML = failures.length === 0
+    ? '<div style="color:#3fb950">✅ 失敗パターンなし</div>'
+    : failures.map(f => `<div class="error-item"><span class="error-count">${f.count}回</span> ${f.pattern.slice(0,80)}</div>`).join('');
+}
+
+connect();
+</script>
+</body>
+</html>

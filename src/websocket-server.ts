@@ -370,3 +370,32 @@ export function broadcastProgress(
 }
 
 export { WebSocketServer, WS_PORT };
+
+// ==================== テレメトリーブロードキャスト (v1.71) ====================
+
+import type { TurnTrace, TelemetryReport } from "./telemetry";
+
+let telemetryRef: any = null;
+
+/** テレメトリーインスタンスを登録（telemetry.tsのinit時） */
+export function registerTelemetryForBroadcast(telemetryInstance: any): void {
+  telemetryRef = telemetryInstance;
+}
+
+/** 現在のテレメトリーを全クライアントにブロードキャスト */
+export function broadcastTelemetry(): void {
+  if (!telemetryRef) return;
+
+  const report: TelemetryReport = telemetryRef.getReport();
+  const failurePatterns = telemetryRef.detectFailurePatterns();
+
+  wsServer.broadcast({
+    type: "telemetry",
+    report: {
+      sessions: report.sessions.slice(0, 5),
+      global: report.globalStats,
+    },
+    failures: failurePatterns.slice(0, 5),
+    timestamp: Date.now(),
+  });
+}

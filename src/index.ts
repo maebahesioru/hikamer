@@ -1296,6 +1296,16 @@ registerCommand("ci", async () => {
     "毎週日曜に自動テストも実行されます。";
 });
 
+// ==================== v1.71: リアルタイムダッシュボード ====================
+
+registerCommand("dashboard", async () => {
+  return "📊 **リアルタイムダッシュボード**\n\n" +
+    "`public/dashboard.html` をブラウザで開いてください。\n" +
+    "WebSocket (ws://localhost:9722) に接続して、\n" +
+    "テレメトリー・セッション・失敗パターンをリアルタイム表示します。\n\n" +
+    "```bash\n# ブラウザで開く\nopen public/dashboard.html\n# または\nstart public/dashboard.html\n```";
+});
+
 // ==================== v1.70: マルチモーダル入力（画像認識 + 音声文字起こし） ====================
 
 registerCommand("vision", async (args) => {
