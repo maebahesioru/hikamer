@@ -146,7 +146,9 @@ registerCommand("cost", async (_args, _userId) => {
 });
 
 registerCommand("health", async () => {
-  return await handleHealthCommand();
+  const { healthChecker } = await import("./health-check");
+  const report = await healthChecker.checkAll();
+  return healthChecker.formatReport(report);
 });
 
 registerCommand("ratelimit", async (_args) => {
