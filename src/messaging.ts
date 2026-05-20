@@ -648,12 +648,7 @@ export async function startDiscord(token: string): Promise<Client> {
         if (preMsg) await preMsg.edit(text).catch(() => {});
         else await sendInThread(text);
       }
-
-      if (postMsg && postReasoning && postReasoning.length > 10) {
-        await postMsg.edit(`🔍 **思考過程:**\n\`\`\`\n${postReasoning.slice(0, 1900)}\n\`\`\``).catch(() => {});
-      } else if (!postMsg && postReasoning && postReasoning.length > 10) {
-        await sendReplyInThread(`🔍 **思考過程:**\n\`\`\`\n${postReasoning.slice(0, 1900)}\n\`\`\``);
-      }
+      // postReasoningはpreFlushed済みなら表示不要（重複防止）
 
       // 回答確定 or エラー送信
       if (result.response.startsWith("[致命的エラー]")) {
