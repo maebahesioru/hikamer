@@ -10,46 +10,24 @@ import { logger } from "../utils/logger";
 
 // ==================== FTS5セットアップ ====================
 
-/** FTS5テーブルが存在するか確認し、なければ作成 */
+/** FTS5テーブルが存在するか確認（db.tsで作成済みのはず） */
 export function ensureFts5Table(): void {
-  const hasMessages = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='messages'"
+  const hasFts = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'"
   ).get();
-  if (!hasMessages) return;
+  if (hasFts) return; // db.tsが既に作成済み
 
-  // 古い外部コンテンツモードのテーブルがあれば再作成
-  db.exec(`DROP TABLE IF EXISTS messages_fts`);
-
+  // なければdb.ts互換のスキーマで作成
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-      content, tool_name, tool_calls,
-      tokenize='unicode61'
+      content,
+      conversation_id UNINDEXED,
+      role UNINDEXED,
+      content='messages',
+      content_rowid='id'
     );
   `);
-
-  const hasTriggers = db.prepare(
-    "SELECT name FROM sqlite_master WHERE type='trigger' AND name='messages_ftsi'"
-  ).get();
-
-  if (!hasTriggers) {
-    db.exec(`
-      CREATE TRIGGER IF NOT EXISTS messages_ftsi AFTER INSERT ON messages BEGIN
-        INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.role, COALESCE(new.tool_calls, ''));
-      END;
-      CREATE TRIGGER IF NOT EXISTS messages_ftsd AFTER DELETE ON messages BEGIN
-        INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.role, COALESCE(old.tool_calls, ''));
-      END;
-      CREATE TRIGGER IF NOT EXISTS messages_ftsu AFTER UPDATE ON messages BEGIN
-        INSERT INTO messages_fts(messages_fts, rowid, content, tool_name, tool_calls)
-        VALUES ('delete', old.id, old.content, old.role, COALESCE(old.tool_calls, ''));
-        INSERT INTO messages_fts(rowid, content, tool_name, tool_calls)
-        VALUES (new.id, new.content, new.role, COALESCE(new.tool_calls, ''));
-      END;
-    `);
-    logger.info("FTS5トリガー作成完了");
-  }
+  logger.info("FTS5テーブル作成（フォールバック）");
 }
 
 // ==================== バックフィル ====================
@@ -58,8 +36,8 @@ export function ensureFts5Table(): void {
 export function backfillFts5(): number {
   ensureFts5Table();
   const count = db.prepare(`
-    INSERT OR IGNORE INTO messages_fts(rowid, content, tool_name, tool_calls)
-    SELECT id, content, role, COALESCE(tool_calls, '') FROM messages
+    INSERT OR IGNORE INTO messages_fts(rowid, content, conversation_id, role)
+    SELECT id, content, conversation_id, role FROM messages
     WHERE id NOT IN (SELECT rowid FROM messages_fts)
   `).run().changes;
   if (count > 0) logger.info(`FTS5バックフィル: ${count}件`);
