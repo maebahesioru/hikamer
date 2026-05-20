@@ -1687,13 +1687,15 @@ async function main() {
     cm.init();
     logger.info("[Connectivity] 接続監視開始");
 
-    // 中断ターンをマーク
-    const interrupted = tm.markInterruptedTurns();
-    if (interrupted > 0) {
-      logger.warn(`[Threads] ${interrupted}個のターンを中断としてマーク（前回のクラッシュの可能性）`);
-    }
+    // 中断ターンをマーク（失敗しても無視）
+    try {
+      const interrupted = tm.markInterruptedTurns();
+      if (interrupted > 0) {
+        logger.warn(`[Threads] ${interrupted}個のターンを中断としてマーク（前回のクラッシュの可能性）`);
+      }
+    } catch {}
   } catch (err) {
-    logger.warn("[Startup] 一部v1.18モジュールの初期化に失敗:", err);
+    logger.warn("[Startup] v1.18モジュール初期化エラー:", String(err));
   }
 
   // v1.38: メモリパイプライン初期化（agentmemory由来）
