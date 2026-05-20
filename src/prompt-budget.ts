@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Budgeted Prompt Builder（roborev internal/prompt/ + internal/worktree/由来）
+// Hikamer - Budgeted Prompt Builder（roborev internal/prompt/ + internal/worktree/由来）
 // サイズ制約付きプロンプト構築 + Git Worktree分離
 // ==========================================
 
@@ -103,7 +103,7 @@ export class PromptBuilder {
 
     if (!diffSection) {
       // diffが予算超過で削除された→ファイルに保存
-      const snapshotDir = resolve(tmpdir(), "aikata-prompt-snapshots");
+      const snapshotDir = resolve(tmpdir(), "hikamer-prompt-snapshots");
       mkdirSync(snapshotDir, { recursive: true });
       const snapshotPath = join(snapshotDir, `diff-${Date.now()}.patch`);
       writeFileSync(snapshotPath, diff, "utf-8");
@@ -151,7 +151,7 @@ export interface Worktree {
 
 /** Gitの一時ワークツリーを作成（安全な分離実行用） */
 export function createWorktree(repoPath: string, ref = "HEAD"): Worktree {
-  const dir = resolve(tmpdir(), `aikata-worktree-${Date.now()}`);
+  const dir = resolve(tmpdir(), `hikamer-worktree-${Date.now()}`);
   mkdirSync(dir, { recursive: true });
 
   execSync(`git -C "${repoPath}" worktree add --detach "${dir}" "${ref}" 2>/dev/null`, {

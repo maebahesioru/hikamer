@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 統合エントリポイント (Discord + Telegram + Scheduler)
+// Hikamer - 統合エントリポイント (Discord + Telegram + Scheduler)
 // v1.36: EXHAUSTIVE - cms-connector + dag-executor + ci-poller + git-utils + content-calendar
 // toprank/ViMax/roborevの全残りパターンを抽出（最終バッチ）
 // ==========================================
@@ -797,7 +797,7 @@ registerCommand("surfaces", async () => {
 });
 
 registerCommand("utils", async () => {
-  const { formatMiscStatus } = await import("./aikata-misc");
+  const { formatMiscStatus } = await import("./hikamer-misc");
   return formatMiscStatus();
 });
 
@@ -1105,7 +1105,7 @@ registerCommand("biz", async (args) => {
     return "🛠️ **おすすめ無料ツール**\n\n" +
       "**AI**\n• Claude (claude.ai) — 文章作成・分析・コーディング\n• ChatGPT — アイデア出し・翻訳\n• Cursor — AIコーディング（学生無料）\n\n" +
       "**発信**\n• X (Twitter) — 情報発信の基本\n• note — 記事で収益化\n• GitHub — コードのポートフォリオ\n\n" +
-      "**自動化**\n• Aikata (君のエージェント) — Discord/Telegram Bot\n• Make (make.com) — ノーコード自動化\n• GitHub Actions — 無料の定期実行";
+      "**自動化**\n• Hikamer (君のエージェント) — Discord/Telegram Bot\n• Make (make.com) — ノーコード自動化\n• GitHub Actions — 無料の定期実行";
   }
 
   return "📋 不明なサブコマンド。`/biz help` で一覧表示。";
@@ -1581,7 +1581,7 @@ export async function preprocessMessage(
 
 async function main() {
   logger.info("═══════════════════════════════════");
-  logger.info(" Aikata v1.34 起動中…");
+  logger.info(" Hikamer v1.34 起動中…");
   logger.info(" NEW REPOS: agent-plugins / prompt-budget / worktree / feedback-scoring / backend-factory");
   logger.info(` プラットフォーム: ${enabledPlatforms.join(", ")}`);
   logger.info("═══════════════════════════════════");
@@ -1715,7 +1715,7 @@ async function main() {
     tools: toolRegistry.list().length,
   }));
 
-  logger.info("Aikata 起動完了 🎉");
+  logger.info("Hikamer 起動完了 🎉");
   logger.info(" /cost /health /tools /reset /ratelimit /inject /info");
 
   writeStatus(true, { platforms: enabledPlatforms, tools: toolRegistry.list().length });

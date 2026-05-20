@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 4階層メモリ統合パイプライン
+// Hikamer - 4階層メモリ統合パイプライン
 // 出典: agentmemory (rohitg00/agentmemory) の4-Tier Memory Consolidation
 // Working → Episodic → Semantic → Procedural
 // v1.59: 3層コンテンツカテゴリ (supermemory由来) + LRUターンキャッシュ

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Vault（OpenHuman vault/ 由来）
+// Hikamer - Vault（OpenHuman vault/ 由来）
 // 暗号化ファイルストレージ + ファイル同期
 // 強化: マルチプロバイダリモート同期（note-gen/note-gen パターン）
 //   - RemoteSyncProvider インターフェース
@@ -131,7 +131,7 @@ class GitHubSyncProvider implements RemoteSyncProvider {
     const apiUrl = `https://api.github.com/repos/${this.config.repo}/git/trees/${this.config.branch ?? "main"}?recursive=1`;
     const headers: Record<string, string> = {
       "Accept": "application/vnd.github+json",
-      "User-Agent": "Aikata-Vault/1.0",
+      "User-Agent": "Hikamer-Vault/1.0",
     };
     if (this.config.token) headers["Authorization"] = `token ${this.config.token}`;
 
@@ -158,13 +158,13 @@ class GitHubSyncProvider implements RemoteSyncProvider {
     const apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${remotePath}`;
     const headers: Record<string, string> = {
       "Accept": "application/vnd.github+json",
-      "User-Agent": "Aikata-Vault/1.0",
+      "User-Agent": "Hikamer-Vault/1.0",
       "Content-Type": "application/json",
     };
     if (this.config.token) headers["Authorization"] = `token ${this.config.token}`;
 
     const body = JSON.stringify({
-      message: `[Aikata Vault] sync ${remotePath}`,
+      message: `[Hikamer Vault] sync ${remotePath}`,
       content: content.toString("base64"),
       branch: this.config.branch ?? "main",
     });
@@ -178,7 +178,7 @@ class GitHubSyncProvider implements RemoteSyncProvider {
     const apiUrl = `https://api.github.com/repos/${this.config.repo}/contents/${remotePath}`;
     const headers: Record<string, string> = {
       "Accept": "application/vnd.github.raw+json",
-      "User-Agent": "Aikata-Vault/1.0",
+      "User-Agent": "Hikamer-Vault/1.0",
     };
     if (this.config.token) headers["Authorization"] = `token ${this.config.token}`;
 
@@ -614,7 +614,7 @@ class VaultManager {
   private loadEncryptionKey(): void {
     const keyEnv = process.env.AIKATA_VAULT_KEY;
     if (keyEnv) {
-      this.encryptionKey = crypto.scryptSync(keyEnv, "aikata-vault-salt", 32);
+      this.encryptionKey = crypto.scryptSync(keyEnv, "hikamer-vault-salt", 32);
     }
   }
 

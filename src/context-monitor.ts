@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Context Budget Monitor (v1.63)
+// Hikamer - Context Budget Monitor (v1.63)
 // 出典: GSD (gsd-build/get-shit-done) context-monitor hook パターン
 // コンテキスト使用率が高いときにエージェントに警告を注入
 // ==========================================

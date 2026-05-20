@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - LLM-as-a-Judge 自己評価エンジン
+// Hikamer - LLM-as-a-Judge 自己評価エンジン
 // 出典: DeepEval (confident-ai/deepeval) LLM-as-a-Judge Pattern
 // 30+ metrics → 5 core: helpfulness/accuracy/safety/conciseness/task-completion
 // ==========================================

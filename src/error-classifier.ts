@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - API Error Classifier（Hermes Agent error_classifier.py 完全移植）
+// Hikamer - API Error Classifier（Hermes Agent error_classifier.py 完全移植）
 // 25カテゴリのAPIエラー分類＋リカバリー戦略
 // ==========================================
 

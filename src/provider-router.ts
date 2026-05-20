@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - AIプロバイダールーター（OpenHuman providers/factory/retry由来）
+// Hikamer - AIプロバイダールーター（OpenHuman providers/factory/retry由来）
 // 高機能プロバイダー抽象化：リトライ＋フォールバック＋負荷分散
 // ==========================================
 

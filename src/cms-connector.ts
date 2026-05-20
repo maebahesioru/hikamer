@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - CMS Connector（toprank seo/seo-analysis/scripts/ 由来）
+// Hikamer - CMS Connector（toprank seo/seo-analysis/scripts/ 由来）
 // WordPress/Strapi/Contentful/Ghostのコンテンツ取得＋SSRF対策
 // ==========================================
 

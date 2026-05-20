@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - フィーチャー状態マシン
+// Hikamer - フィーチャー状態マシン
 // 出典: clawpatch (openclaw/clawpatch) のFeature State Machine
 // pending → claimed → reviewed → needs-fix → fixing → fixed → revalidated
 // ==========================================

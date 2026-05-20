@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - システムサービス管理（OpenHuman service/由来）
+// Hikamer - システムサービス管理（OpenHuman service/由来）
 // systemd/launchd/Windowsサービスとしての運用管理
 // ==========================================
 
@@ -28,7 +28,7 @@ class ServiceManager {
   private scriptPath: string;
 
   constructor(serviceName?: string) {
-    this.serviceName = serviceName || "aikata";
+    this.serviceName = serviceName || "hikamer";
     this.scriptPath = resolve(process.cwd(), "src/index.ts");
   }
 
@@ -54,7 +54,7 @@ class ServiceManager {
     const nodePath = process.execPath;
 
     const serviceContent = `[Unit]
-Description=Aikata AI Agent
+Description=Hikamer AI Agent
 After=network.target
 
 [Service]
@@ -89,9 +89,9 @@ WantedBy=multi-user.target
     const p = port || 9720;
     return `version: '3.8'
 services:
-  aikata:
+  hikamer:
     build: .
-    container_name: aikata
+    container_name: hikamer
     restart: unless-stopped
     ports:
       - "${p}:${p}"

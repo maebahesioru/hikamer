@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Content Calendar + Portfolio（toprank bin/toprank-content-calendar + portfolio_review.py由来）
+// Hikamer - Content Calendar + Portfolio（toprank bin/toprank-content-calendar + portfolio_review.py由来）
 // コンテンツカレンダー管理 + マルチサイトポートフォリオ
 // ==========================================
 

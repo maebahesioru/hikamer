@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Plugin System (v1.69)
+// Hikamer - Plugin System (v1.69)
 // 出典: paperclip adapter-plugin pattern + superpowers plugin loading
 // 外部拡張の動的読み込み・ホットリロード
 // ==========================================

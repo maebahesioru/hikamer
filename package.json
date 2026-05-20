@@ -1,7 +1,7 @@
 {
-  "name": "aikata",
+  "name": "hikamer",
   "version": "1.0.0",
-  "description": "自律型AIエージェント「Aikata」- Discord Bot + マルチツール + SQLite永続化",
+  "description": "自律型AIエージェント「Hikamer」- Discord Bot + マルチツール + SQLite永続化",
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",

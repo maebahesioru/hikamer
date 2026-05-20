@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Entity-Relation Graph Extractor (v1.65)
+// Hikamer - Entity-Relation Graph Extractor (v1.65)
 // 出典: LightRAG (hkuds/lightrag) — entity-relationship extraction pattern
 // ドキュメントからエンティティと関係を抽出し、グラフ検索を強化
 // hybrid-search.ts の CodeGraph と統合

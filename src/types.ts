@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - コア型定義 (v1.2 - streaming + reasoning)
+// Hikamer - コア型定義 (v1.2 - streaming + reasoning)
 // ==========================================
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";

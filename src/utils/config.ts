@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 動的設定管理 (v1.3 - apiKey分離 + AGENT_MODEL)
+// Hikamer - 動的設定管理 (v1.3 - apiKey分離 + AGENT_MODEL)
 // ==========================================
 
 import { readFileSync, writeFileSync, existsSync } from "fs";

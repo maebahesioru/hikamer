@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - TTS Backend レジストリ
+// Hikamer - TTS Backend レジストリ
 // 出典: OmniVoice-Studio (debpalash/OmniVoice-Studio)
 // Abstract Base + Plugin Registry パターン
 // ==========================================
@@ -348,7 +348,7 @@ class LocalTTS extends TTSBackend {
     const { resolve } = await import("path");
     const os = process.platform;
 
-    const tmpFile = resolve("/tmp", `aikata-tts-${Date.now()}.wav`);
+    const tmpFile = resolve("/tmp", `hikamer-tts-${Date.now()}.wav`);
     const speed = options?.speed ?? 1.0;
 
     try {

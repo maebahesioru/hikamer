@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Research Pipeline (v1.64)
+// Hikamer - Research Pipeline (v1.64)
 // 出典: Imbad0202/academic-research-skills (12.7K stars)
 // 5段階パイプライン: Research → Write → Review → Revise → Finalize
 // token budget管理 + per-mode最適化

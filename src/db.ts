@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - SQLite データベース初期化
+// Hikamer - SQLite データベース初期化
 // ==========================================
 
 import Database from "better-sqlite3";
@@ -10,7 +10,7 @@ import { logger } from "./utils/logger";
 const dataDir = process.env.DATA_DIR || "./data";
 mkdirSync(dataDir, { recursive: true });
 
-const dbPath = resolve(dataDir, "aikata.db");
+const dbPath = resolve(dataDir, "hikamer.db");
 const db = new Database(dbPath);
 
 db.pragma("journal_mode = WAL");

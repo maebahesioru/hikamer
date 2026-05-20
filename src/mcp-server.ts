@@ -1,7 +1,7 @@
 // ==========================================
-// Aikata - MCPサーバー機能（OpenHuman openhuman/mcp_server由来）
-// Aikataの全ツールをMCPプロトコルで外部公開
-// 別プロセスからMCPクライアント経由でAikataツールを呼び出せる
+// Hikamer - MCPサーバー機能（OpenHuman openhuman/mcp_server由来）
+// Hikamerの全ツールをMCPプロトコルで外部公開
+// 別プロセスからMCPクライアント経由でHikamerツールを呼び出せる
 // ==========================================
 
 import { toolRegistry } from "./tools/registry";
@@ -70,7 +70,7 @@ class MCPServer {
             resources: {},   // リソース提供可能
           },
           serverInfo: {
-            name: "aikata",
+            name: "hikamer",
             version: "1.9.0",
           },
         });
@@ -120,21 +120,21 @@ class MCPServer {
         return this.jsonRpc(id, {
           resources: [
             {
-              uri: "aikata://tools",
+              uri: "hikamer://tools",
               name: "利用可能ツール一覧",
-              description: "Aikataに登録されている全ツール",
+              description: "Hikamerに登録されている全ツール",
               mimeType: "text/plain",
             },
             {
-              uri: "aikata://health",
+              uri: "hikamer://health",
               name: "ヘルスステータス",
-              description: "Aikataの健全性情報",
+              description: "Hikamerの健全性情報",
               mimeType: "application/json",
             },
             {
-              uri: "aikata://cost",
+              uri: "hikamer://cost",
               name: "コスト情報",
-              description: "AikataのLLM使用コスト",
+              description: "HikamerのLLM使用コスト",
               mimeType: "application/json",
             },
           ],
@@ -145,7 +145,7 @@ class MCPServer {
       case "resources/read": {
         const uri = params?.uri as string;
         switch (uri) {
-          case "aikata://tools": {
+          case "hikamer://tools": {
             const toolNames = toolRegistry.list().map(t => `- ${t.name}: ${t.description}`);
             return this.jsonRpc(id, {
               contents: [{
@@ -155,7 +155,7 @@ class MCPServer {
               }],
             });
           }
-          case "aikata://health": {
+          case "hikamer://health": {
             try {
               const { handleHealthCommand } = await import("./health");
               const healthText = await handleHealthCommand();
@@ -176,7 +176,7 @@ class MCPServer {
               });
             }
           }
-          case "aikata://cost": {
+          case "hikamer://cost": {
             const { formatCostSummary } = await import("./cost-tracker");
             return this.jsonRpc(id, {
               contents: [{

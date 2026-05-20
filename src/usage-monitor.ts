@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - リアルタイム使用量モニター (UsageMonitor)
+// Hikamer - リアルタイム使用量モニター (UsageMonitor)
 // 出典: claude-pulse (NoobyGains/claude-pulse) パターン
 // セッション/週間/コンテキスト/コスト/ピーク時間 統合監視
 // ==========================================
@@ -495,7 +495,7 @@ export function formatUsageSummary(
   const config = monitor.getConfig();
 
   const lines: string[] = [
-    `${bold}📊 Aikata 使用量サマリ${reset}`,
+    `${bold}📊 Hikamer 使用量サマリ${reset}`,
     "",
     `🕐 セッション: ${(stats.sessionPct * 100).toFixed(1)}% ` +
       `(${Math.floor(config.sessionLimitSeconds / 3600)}h 上限)`,

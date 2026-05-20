@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - セルフヒーリング（OpenHuman connectivity + heartbeat由来）
+// Hikamer - セルフヒーリング（OpenHuman connectivity + heartbeat由来）
 // 自動復旧・プロセス監視・障害対応
 // ==========================================
 

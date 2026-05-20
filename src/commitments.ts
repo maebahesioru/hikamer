@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Commitments System（OpenClaw commitments/ 由来）
+// Hikamer - Commitments System（OpenClaw commitments/ 由来）
 // 会話から約束・期限・フォローアップを自動抽出、追跡、通知
 // ==========================================
 

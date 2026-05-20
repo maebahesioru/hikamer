@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - オーディオツールキット（OpenHuman audio_toolkit/ 由来）
+// Hikamer - オーディオツールキット（OpenHuman audio_toolkit/ 由来）
 // 音声処理ユーティリティ（voice.tsの補完）
 // ==========================================
 
@@ -39,7 +39,7 @@ export interface AudioClip {
 
 class AudioToolkit {
   private clips: AudioClip[] = [];
-  private tempDir = "/tmp/aikata-audio";
+  private tempDir = "/tmp/hikamer-audio";
   private initialized = false;
 
   init(): void {

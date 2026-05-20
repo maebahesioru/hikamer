@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Error Recovery Patterns (v1.67)
+// Hikamer - Error Recovery Patterns (v1.67)
 // 出典: tanayshah11/ai-agent-error-patterns
 // 4つの実戦テスト済み信頼性パターン
 // ==========================================

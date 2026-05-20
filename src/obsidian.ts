@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Obsidian/ノート統合（OpenHuman memory/Obsidian由来）
+// Hikamer - Obsidian/ノート統合（OpenHuman memory/Obsidian由来）
 // Obsidian Vaultの読み書き・ノート管理
 // ==========================================
 

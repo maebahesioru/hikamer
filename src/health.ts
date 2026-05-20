@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ヘルス監視システム（OpenHuman health/connectivity由来）
+// Hikamer - ヘルス監視システム（OpenHuman health/connectivity由来）
 // プロセス健全性チェック + 自動再起動
 // ==========================================
 
@@ -275,7 +275,7 @@ export function formatHealth(status: HealthStatus): string {
   const uptimeStr = fmtDuration(status.uptime);
 
   const lines = [
-    `${emoji} **Aikata ヘルスステータス**`,
+    `${emoji} **Hikamer ヘルスステータス**`,
     `状態: \`${status.status}\``,
     `稼働時間: ${uptimeStr}`,
     `起動: ${status.startedAt}`,

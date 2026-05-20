@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 画面認識/OCR（OpenHuman screen_intelligence + accessibility由来）
+// Hikamer - 画面認識/OCR（OpenHuman screen_intelligence + accessibility由来）
 // 画像テキスト抽出 + スクリーンショット解析
 // ==========================================
 

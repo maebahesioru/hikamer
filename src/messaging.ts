@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Messaging (Discord + Telegram)
+// Hikamer - Messaging (Discord + Telegram)
 // ==========================================
 
 import { Client, Events, GatewayIntentBits, ChannelType, SlashCommandBuilder, REST, Routes } from "discord.js";
@@ -97,10 +97,10 @@ async function generateThreadTitle(response: string): Promise<string> {
       [{ role: "user", content: `以下の会話の内容を80文字以内のスレッドタイトルに要約して。タイトルだけを返して。\n\n${response.slice(0, 1500)}` }],
       [],
     );
-    const title = (result.content || "Aikata 会話").replace(/\n/g, " ").trim().slice(0, 80);
-    return title || "Aikata 会話";
+    const title = (result.content || "Hikamer 会話").replace(/\n/g, " ").trim().slice(0, 80);
+    return title || "Hikamer 会話";
   } catch {
-    return response.replace(/\n/g, " ").trim().slice(0, 80) || "Aikata 会話";
+    return response.replace(/\n/g, " ").trim().slice(0, 80) || "Hikamer 会話";
   }
 }
 
@@ -342,7 +342,7 @@ export async function startDiscord(token: string): Promise<Client> {
           const active = getActiveModel();
           const runtime = getRuntimeConfig();
           await interaction.reply(
-            `**Aikata 設定**\n` +
+            `**Hikamer 設定**\n` +
             `プロバイダー: ${active.provider}\n` +
             `モデル: ${active.model}\n` +
             `最大反復: ${runtime.maxIterations}\n` +
@@ -421,7 +421,7 @@ export async function startDiscord(token: string): Promise<Client> {
         let threadCreated = false;
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
-            const title = cleanContent.slice(0, 80) || "Aikata 会話";
+            const title = cleanContent.slice(0, 80) || "Hikamer 会話";
             const thread = await message.startThread({
               name: title,
               autoArchiveDuration: 60,
@@ -701,7 +701,7 @@ export async function startTelegramBot(
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
-      "Aikata v1.1 起動！\n" +
+      "Hikamer v1.1 起動！\n" +
       "/provider /model /models /maxiter /info で設定\n" +
       "/addprovider /delprovider でプロバイダ管理\n" +
       "/reset /jobs"

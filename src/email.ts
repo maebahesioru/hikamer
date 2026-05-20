@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - メール統合（OpenHuman channels + integrations由来）
+// Hikamer - メール統合（OpenHuman channels + integrations由来）
 // SMTP送信 + IMAP受信 + メール処理
 // ==========================================
 

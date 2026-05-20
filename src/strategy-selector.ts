@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Strategy Selector (v1.62)
+// Hikamer - Strategy Selector (v1.62)
 // 出典: EvoMap/evolver — Strategy Presets + Selector pattern
 // タスク内容から最適な実行戦略を自動選択
 // subagents.ts の SpecializedAgentPool と連携

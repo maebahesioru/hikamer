@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 状況レポート（OpenHuman subconscious/situation_report/ 由来）
+// Hikamer - 状況レポート（OpenHuman subconscious/situation_report/ 由来）
 // サブコンシャス定期ティック用の状況レポートビルダー
 // ==========================================
 

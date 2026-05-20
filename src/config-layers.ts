@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Multi-Layer Config Resolution（roborev internal/config/ 由来）
+// Hikamer - Multi-Layer Config Resolution（roborev internal/config/ 由来）
 // CLI→Repo→Global→Defaultの5層設定解決 + ホットリロード
 // ==========================================
 

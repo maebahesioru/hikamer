@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ModelRegistry (open-notebook pattern)
+// Hikamer - ModelRegistry (open-notebook pattern)
 // Credential-Model 分離: 認証情報とモデル定義を独立管理
 // ==========================================
 

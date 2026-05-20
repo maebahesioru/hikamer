@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 累積コストキャッシュ
+// Hikamer - 累積コストキャッシュ
 // 出典: claude-pulse (NoobyGains/claude-pulse) Cumulative Cost Tracking
 // セッション跨ぎでAPIコストを永続化・集計
 // ==========================================

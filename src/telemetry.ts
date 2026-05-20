@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Agent Telemetry (v1.68)
+// Hikamer - Agent Telemetry (v1.68)
 // 出典: langfuse (YC W23, 7K+★) 軽量版 + Hermes Agent GEPAパターン
 // 構造化トレーシング: 全ツール呼び出し・レイテンシ・成功率を追跡
 // 改善しようにも計測できてなかった問題を解決
@@ -232,7 +232,7 @@ class AgentTelemetry {
   formatReport(report: TelemetryReport): string {
     const g = report.globalStats;
     const lines: string[] = [
-      `📊 **Aikata テレメトリーレポート**`,
+      `📊 **Hikamer テレメトリーレポート**`,
       ``,
       `**全体統計**`,
       `セッション数: ${g.totalSessions}`,

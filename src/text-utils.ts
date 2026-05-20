@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Text Utilities（OpenClaw shared/text/ + HA redact由来）
+// Hikamer - Text Utilities（OpenClaw shared/text/ + HA redact由来）
 // コード領域検出・タグ除去・CJKトークン推定・JSON抽出
 // ==========================================
 

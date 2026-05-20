@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - WebViewアカウント管理（OpenHuman webview_accounts/ 由来）
+// Hikamer - WebViewアカウント管理（OpenHuman webview_accounts/ 由来）
 // ブラウザベースのアカウント連携・セッション管理
 // ==========================================
 
@@ -80,7 +80,7 @@ class WebViewAccountManager {
     const session: WebViewSession = {
       id: `wvs-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
       accountId,
-      userAgent: "Aikata/1.0",
+      userAgent: "Hikamer/1.0",
       ipAddress: "127.0.0.1",
       createdAt: Date.now(),
       lastActivity: Date.now(),

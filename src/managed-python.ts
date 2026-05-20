@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Managed Python Runtime（OpenHuman runtime_python/ 由来）
+// Hikamer - Managed Python Runtime（OpenHuman runtime_python/ 由来）
 // Python実行環境の自動検出・ダウンロード・起動管理
 // ==========================================
 

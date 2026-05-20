@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Crestodian / AI Self-Heal（OpenClaw crestodian/由来）
+// Hikamer - Crestodian / AI Self-Heal（OpenClaw crestodian/由来）
 // LLM駆動のシステム診断・自己修復エンジン
 // 既存のself-healer.ts（ルールベース）と連携し、LLM診断を追加
 // ==========================================
@@ -492,7 +492,7 @@ export async function diagnoseWithLLM(input: string): Promise<CrestodianOperatio
   try {
     const overview = await collectOverview();
     const prompt = [
-      "あなたはAIエージェントAikataの診断アシスタントです。",
+      "あなたはAIエージェントHikamerの診断アシスタントです。",
       "ユーザーの入力を解析し、実行すべき診断操作をJSONで返してください。",
       "",
       "現在のシステム状態:",

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Daily Diary / Learning Journal (v1.73)
+// Hikamer - Daily Diary / Learning Journal (v1.73)
 // 前日の学習内容を「日記」として自動出力
 // telemetry + memory-pipeline のデータを活用
 // ==========================================
@@ -181,7 +181,7 @@ class DiaryGenerator {
 
   formatDiary(entry: DiaryEntry): string {
     const lines: string[] = [
-      `📓 **Aikata日記** — ${entry.date}`,
+      `📓 **Hikamer日記** — ${entry.date}`,
       ``,
       `📊 ${entry.summary}`,
       ``,

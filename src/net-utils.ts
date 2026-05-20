@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Network Utilities（OpenClaw shared/net/ + utils/fetch-timeout由来）
+// Hikamer - Network Utilities（OpenClaw shared/net/ + utils/fetch-timeout由来）
 // SSRF対策IP検証・タイムアウト付きHTTP・ログ用URL秘匿化
 // ==========================================
 

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - シェルフック（Hermes Agent shell_hooks.py 由来）
+// Hikamer - シェルフック（Hermes Agent shell_hooks.py 由来）
 // シェル統合・コマンド履歴・環境管理
 // ==========================================
 
@@ -174,12 +174,12 @@ class ShellManager {
   /** 起動スクリプトを生成 */
   generateRcScript(): string {
     const lines = [
-      "# Aikata shell integration",
+      "# Hikamer shell integration",
       "# Generated for " + this.config.shell,
       "",
       "# Aliases",
-      'alias aikata="node /path/to/aikata"',
-      'alias ai="aikata"',
+      'alias hikamer="node /path/to/hikamer"',
+      'alias ai="hikamer"',
       "",
       "# Environment",
       'export AIKATA_SHELL_INTEGRATION="1"',

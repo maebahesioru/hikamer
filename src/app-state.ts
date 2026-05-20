@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - アプリ状態管理 + ワークスペース初期化（OpenHuman app_state + workspace由来）
+// Hikamer - アプリ状態管理 + ワークスペース初期化（OpenHuman app_state + workspace由来）
 // 永続化状態管理・初回セットアップ・ヘルススナップショット
 // ==========================================
 
@@ -160,7 +160,7 @@ class AppStateManager {
       : "";
 
     return [
-      `📊 **Aikata 状態** v${s.version}`,
+      `📊 **Hikamer 状態** v${s.version}`,
       `起動: ${s.runCount}回目${s.firstRun ? " 🆕" : ""}`,
       `稼働時間: ${uptimeStr}`,
       `メッセージ: ${s.metrics.totalMessages} | コマンド: ${s.metrics.totalCommands} | エラー: ${s.metrics.totalErrors}`,

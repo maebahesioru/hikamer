@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - HTTPリクエストツール（OpenHuman由来）
+// Hikamer - HTTPリクエストツール（OpenHuman由来）
 // ブラウザ不要のシンプルHTTPリクエスト
 // ==========================================
 
@@ -104,7 +104,7 @@ const httpTool: ToolDescriptor = {
     }
 
     const fetchHeaders: Record<string, string> = {
-      "User-Agent": "Aikata/1.0 (HTTP Request Tool)",
+      "User-Agent": "Hikamer/1.0 (HTTP Request Tool)",
       ...headers,
     };
 

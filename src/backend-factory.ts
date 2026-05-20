@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Backend Factory + Rate Limiter（ViMax tools/ + utils/ 由来）
+// Hikamer - Backend Factory + Rate Limiter（ViMax tools/ + utils/ 由来）
 // 設定駆動型プラグ可能プロバイダファクトリ + 非同期レート制限
 // ==========================================
 

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - MCPクライアント（JSON-RPC直実装）
+// Hikamer - MCPクライアント（JSON-RPC直実装）
 // stdio/HTTP MCPサーバーに接続→ツール動的発見→toolRegistry登録
 // ==========================================
 
@@ -97,7 +97,7 @@ class McpConnection {
     await this.request("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: { tools: {} },
-      clientInfo: { name: "aikata", version: "1.0.0" },
+      clientInfo: { name: "hikamer", version: "1.0.0" },
     });
   }
 

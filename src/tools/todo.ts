@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - タスク管理・Todoシステム（OpenHuman + Hermes Agent由来）
+// Hikamer - タスク管理・Todoシステム（OpenHuman + Hermes Agent由来）
 // SQLiteベースのタスクボード + Todo
 // ==========================================
 

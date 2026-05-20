@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - DAG Executor（ViMax agents/camera_image_generator.py 由来）
+// Hikamer - DAG Executor（ViMax agents/camera_image_generator.py 由来）
 // 非同期依存タスクグラフ + asyncio.Event連携
 // ==========================================
 

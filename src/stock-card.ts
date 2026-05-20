@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 株カード簡易分析 (v1.60)
+// Hikamer - 株カード簡易分析 (v1.60)
 // 出典: TradingAgents (TauricResearch) + OpenTrader のパターン
 // 高校生向け: 3指標 + ヘルススコア、LLM不要
 // データソース: Yahoo Finance (無料・認証不要)
@@ -62,7 +62,7 @@ async function fetchYahooFinance(symbol: string): Promise<any> {
 
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Aikata/1.0 stock-card)",
+      "User-Agent": "Mozilla/5.0 (Hikamer/1.0 stock-card)",
       "Accept": "application/json",
     },
     signal: AbortSignal.timeout(10000),

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Heartbeat + Planner Loop（OpenHuman heartbeat/ 由来）
+// Hikamer - Heartbeat + Planner Loop（OpenHuman heartbeat/ 由来）
 // 定期的なバックグラウンドループで自律タスクを実行
 // HEARTBEAT.mdファイル駆動・カレンダー・リマインダー連携
 // ==========================================
@@ -171,7 +171,7 @@ function collectEvents(): PendingEvent[] {
   try {
     const { listDueForSession } = require("./commitments");
     // 汎用的なセッションキーでコミットメント取得
-    const due = listDueForSession("aikata", "heartbeat", { limit: 5 });
+    const due = listDueForSession("hikamer", "heartbeat", { limit: 5 });
     for (const c of due) {
       const id = `cm_${c.id}`;
       if (isAlreadySent(id, store)) continue;

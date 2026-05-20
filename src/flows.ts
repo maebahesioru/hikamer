@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Flow System（OpenClaw flows/ 由来）
+// Hikamer - Flow System（OpenClaw flows/ 由来）
 // LLMガイド付きセットアップウィザード＋ヘルスチェックフロー
 // ==========================================
 
@@ -178,7 +178,7 @@ registerHealthCheck({
 /** 対話型セットアップウィザード（LLMが使えないときのテキストベース） */
 export function formatSetupGuide(): string {
   const lines: string[] = [
-    "🚀 **Aikata セットアップガイド**",
+    "🚀 **Hikamer セットアップガイド**",
     "",
     "**ステップ1: モデルプロバイダの設定**",
     "  対応プロバイダ:",

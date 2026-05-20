@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Meetエージェント（OpenHuman meet_agent/ 由来）
+// Hikamer - Meetエージェント（OpenHuman meet_agent/ 由来）
 // 会議参加エージェント・発言・議事録生成（meet.tsの補完）
 // ==========================================
 
@@ -90,7 +90,7 @@ class MeetAgent {
   /** エージェントへの発言か判定 */
   private isAddressedToAgent(text: string): boolean {
     const lower = text.toLowerCase();
-    const agentNames = ["agent", "aikata", "bot", "エージェント", "アイカタ"];
+    const agentNames = ["agent", "hikamer", "bot", "エージェント", "ヒカマー"];
     return agentNames.some((name) => lower.includes(name)) ||
            text.includes("@");
   }

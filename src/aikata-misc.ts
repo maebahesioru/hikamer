@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ユーティリティ（OpenHuman 残り小モジュール 由来）
+// Hikamer - ユーティリティ（OpenHuman 残り小モジュール 由来）
 // JavaScript・開発パス・HTTPホスト・WebView API/通知
 // ==========================================
 
@@ -38,7 +38,7 @@ export function getDevPaths(): DevPath[] {
     { name: "data", path: process.env.DATA_DIR || "./data", type: "data" },
     { name: "vault", path: process.env.AIKATA_VAULT_DIR || "./vaults", type: "data" },
     { name: "temp", path: "/tmp", type: "temp" },
-    { name: "config", path: process.env.HOME ? path.join(process.env.HOME, ".config", "aikata") : "./config", type: "config" },
+    { name: "config", path: process.env.HOME ? path.join(process.env.HOME, ".config", "hikamer") : "./config", type: "config" },
   ];
 }
 

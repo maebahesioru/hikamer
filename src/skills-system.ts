@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - スキルシステム（OpenClaw .agents/skills/ 由来）
+// Hikamer - スキルシステム（OpenClaw .agents/skills/ 由来）
 // SKILL.md形式のスキル定義・自動発見・実行
 // ==========================================
 
@@ -64,7 +64,7 @@ class SkillSystem {
   private readonly DEFAULT_SKILL_DIRS = [
     "./skills",
     "./.agents/skills",
-    process.env.HOME ? path.join(process.env.HOME, ".aikata", "skills") : "",
+    process.env.HOME ? path.join(process.env.HOME, ".hikamer", "skills") : "",
   ].filter(Boolean);
 
   init(): void {
@@ -85,7 +85,7 @@ class SkillSystem {
         "CLAIM→EXTRACT→DOUBT→RECONCILE→STOP: adversarially challenge every claim before acting",
       category: "safety",
       version: "1.0.0",
-      author: "Aikata",
+      author: "Hikamer",
       triggers: [
         "doubt", "verify", "double-check", "skeptical",
         "challenge assumption", "fact check",
@@ -147,7 +147,7 @@ class SkillSystem {
         "Chesterton's Fence: answer 6 questions before removing/modifying existing code. Never remove what you don't understand.",
       category: "safety",
       version: "1.0.0",
-      author: "Aikata",
+      author: "Hikamer",
       triggers: [
         "refactor", "remove", "delete", "clean up", "simplify",
         "modernize", "rewrite", "deprecate", "get rid of",

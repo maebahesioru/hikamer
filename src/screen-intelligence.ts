@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 画面インテリジェンス（OpenHuman screen_intelligence/ 由来）
+// Hikamer - 画面インテリジェンス（OpenHuman screen_intelligence/ 由来）
 // スクリーンキャプチャ・OCR・ビジョン解析
 // ==========================================
 
@@ -46,7 +46,7 @@ export interface VisionAnalysis {
 class ScreenIntelligence {
   private captures: CaptureResult[] = [];
   private initialized = false;
-  private tempDir = "/tmp/aikata-screen";
+  private tempDir = "/tmp/hikamer-screen";
 
   init(): void {
     if (this.initialized) return;

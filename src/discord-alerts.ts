@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Discord通知拡張（Hydro0x01由来）
+// Hikamer - Discord通知拡張（Hydro0x01由来）
 // 出典: Hydro0x01 (40rbidd3n/Hydro0x01) notification.service.ts
 // 重大度色付きEmbed + テンプレート + レート制限
 // ==========================================
@@ -144,7 +144,7 @@ class DiscordAlertBuilder {
       title: `${tpl.emoji} ${tpl.titlePattern}${data.title_suffix ? `: ${data.title_suffix}` : ""}`,
       message: data.message || "",
       fields: data.fields ? this.parseFields(data.fields) : undefined,
-      footer: data.footer || "Aikata Notification System",
+      footer: data.footer || "Hikamer Notification System",
     });
   }
 

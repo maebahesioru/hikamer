@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - CLIテストモード (v1.2 - コマンド統合)
+// Hikamer - CLIテストモード (v1.2 - コマンド統合)
 // ==========================================
 
 import { createInterface } from "readline";
@@ -33,7 +33,7 @@ function printHelp() {
 /exit                        終了`);
 }
 
-logger.info("Aikata CLI v1.2");
+logger.info("Hikamer CLI v1.2");
 logger.info(`${getActiveModel().provider}/${getActiveModel().model}`);
 printHelp();
 
@@ -107,7 +107,7 @@ rl.on("line", async (line) => {
   running = true;
   try {
     const result = await agentLoop(provider, await buildSystemPrompt(), input, cid, "cli");
-    console.log(`\n🤖 Aikata:\n${result.response}`);
+    console.log(`\n🤖 Hikamer:\n${result.response}`);
     console.log(`\n(${result.iterations}反復, ${result.toolLogs.length}ツール)`);
   } catch (e: any) { logger.error(`エラー: ${e.message}`); }
   finally { running = false; rl.prompt(); }

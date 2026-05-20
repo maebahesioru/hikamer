@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ブラウザ操作 v2 (camofox実API + playwright-fallback)
+// Hikamer - ブラウザ操作 v2 (camofox実API + playwright-fallback)
 // camofox: tabベース (POST /tabs → /tabs/:id/navigate etc.)
 // playwright: 直接操作 (camofox未起動時の自動フォールバック)
 // UAローテーション対応: ClaudeWeb等で規制回避
@@ -102,14 +102,14 @@ async function camofoxEnsureTab(url?: string): Promise<string> {
   if (camofoxTabId) {
     // 既存タブが生きてるか軽く確認
     try {
-      const res = await fetch(`${CAMOFOX_URL}/tabs/${camofoxTabId}/snapshot?userId=aikata`, {
+      const res = await fetch(`${CAMOFOX_URL}/tabs/${camofoxTabId}/snapshot?userId=hikamer`, {
         signal: AbortSignal.timeout(3_000),
       });
       if (res.ok) return camofoxTabId;
     } catch { camofoxTabId = null; }
   }
   // 新規タブ作成
-  const body: any = { userId: "aikata", sessionKey: "default" };
+  const body: any = { userId: "hikamer", sessionKey: "default" };
   if (url) body.url = url;
   const res = await fetch(`${CAMOFOX_URL}/tabs`, {
     method: "POST",
@@ -134,7 +134,7 @@ async function camofoxNavigate(url: string): Promise<string> {
   const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/navigate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: "aikata", url }),
+    body: JSON.stringify({ userId: "hikamer", url }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`camofox navigate ${res.status}`);
@@ -144,7 +144,7 @@ async function camofoxNavigate(url: string): Promise<string> {
 
 async function camofoxSnapshot(): Promise<string> {
   const tabId = await camofoxEnsureTab();
-  const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/snapshot?userId=aikata`, {
+  const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/snapshot?userId=hikamer`, {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`camofox snapshot ${res.status}`);
@@ -157,7 +157,7 @@ async function camofoxClick(ref: string): Promise<string> {
   const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/click`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: "aikata", ref }),
+    body: JSON.stringify({ userId: "hikamer", ref }),
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`camofox click ${res.status}`);
@@ -171,7 +171,7 @@ async function camofoxType(ref: string, text: string): Promise<string> {
   const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/type`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: "aikata", ref, text }),
+    body: JSON.stringify({ userId: "hikamer", ref, text }),
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`camofox type ${res.status}`);
@@ -181,7 +181,7 @@ async function camofoxType(ref: string, text: string): Promise<string> {
 
 async function camofoxScreenshot(): Promise<string> {
   const tabId = await camofoxEnsureTab();
-  const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/screenshot?userId=aikata`, {
+  const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/screenshot?userId=hikamer`, {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`camofox screenshot ${res.status}`);
@@ -194,7 +194,7 @@ async function camofoxExtract(): Promise<string> {
   const res = await fetch(`${CAMOFOX_URL}/tabs/${tabId}/extract`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: "aikata" }),
+    body: JSON.stringify({ userId: "hikamer" }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`camofox extract ${res.status}`);
@@ -205,7 +205,7 @@ async function camofoxExtract(): Promise<string> {
 async function camofoxClose(): Promise<void> {
   if (camofoxTabId) {
     try {
-      await fetch(`${CAMOFOX_URL}/tabs/${camofoxTabId}?userId=aikata`, {
+      await fetch(`${CAMOFOX_URL}/tabs/${camofoxTabId}?userId=hikamer`, {
         method: "DELETE",
         signal: AbortSignal.timeout(5_000),
       });

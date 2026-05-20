@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 高度Cron管理ツール（OpenClaw cron-quick-create由来）
+// Hikamer - 高度Cron管理ツール（OpenClaw cron-quick-create由来）
 // /schedule create, schedule list の強化版
 // ==========================================
 

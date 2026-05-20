@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - URL管理/短縮（OpenHuman redirect_links由来）
+// Hikamer - URL管理/短縮（OpenHuman redirect_links由来）
 // URL解決・短縮生成・リンク管理
 // ==========================================
 

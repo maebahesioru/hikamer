@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - コンテキストエンジン（OpenClaw Context Engine Plugin System 由来）
+// Hikamer - コンテキストエンジン（OpenClaw Context Engine Plugin System 由来）
 // プラグイン式コンテキストアセンブリ + 制御プレーンフィンガープリント
 // ==========================================
 

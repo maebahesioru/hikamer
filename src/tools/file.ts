@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ファイル操作ツール
+// Hikamer - ファイル操作ツール
 // ==========================================
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "fs";

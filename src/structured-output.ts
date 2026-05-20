@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Structured Output Enforcer (v1.72)
+// Hikamer - Structured Output Enforcer (v1.72)
 // 出典: nadeesha/structlm + guidance-ai/llguidance パターン
 // JSON SchemaによるLLM出力の検証・再試行・修復
 // ==========================================

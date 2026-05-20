@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - メモリブリッジ（拡張版memory.ts）
+// Hikamer - メモリブリッジ（拡張版memory.ts）
 // 既存のFrozen Snapshot方式 + agentmemoryのハイブリッド検索 + 4-Tierパイプライン
 // 後方互換性を維持しつつ強化
 // ==========================================
@@ -96,7 +96,7 @@ function getPipeline(): MemoryPipeline {
 
 /**
  * 観察を記録（自動メモリ）
- * Aikata起動中にエージェントが学習した内容を自動保存
+ * Hikamer起動中にエージェントが学習した内容を自動保存
  */
 export async function observeMemory(
   text: string,
@@ -632,7 +632,7 @@ export function extractSPOTriples(text: string): SPOTriple[] {
  * SPOクエリにマッチするトリプレットを検索。
  * ? はワイルドカード（memvidの triple-pattern query 相当）。
  *
- * 例: { subject: "Aikata", predicate: "uses" } → Aikataが使うものを全検索
+ * 例: { subject: "Hikamer", predicate: "uses" } → Hikamerが使うものを全検索
  * 例: { predicate: "is_a", object: "AI agent" } → AIエージェントであるものを全検索
  */
 export function querySPOTriples(

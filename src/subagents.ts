@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Sub-Agent System（OpenClaw subagent/ 由来）
+// Hikamer - Sub-Agent System（OpenClaw subagent/ 由来）
 // バックグラウンド分離エージェント生成・ライフサイクル管理
 // ==========================================
 

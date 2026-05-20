@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - MCP OAuth認証（Hermes Agent由来）
+// Hikamer - MCP OAuth認証（Hermes Agent由来）
 // MCPサーバー接続時のOAuth認証フロー
 // ==========================================
 

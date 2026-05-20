@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Retry & Async Utilities（OH util.rs + OC lazy-runtime + HA retry_utils由来）
+// Hikamer - Retry & Async Utilities（OH util.rs + OC lazy-runtime + HA retry_utils由来）
 // 指数バックオフ・ジッター・遅延ロード・並列実行制御
 // ==========================================
 

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - LSP統合（Hermes Agent agent/lsp/ 由来）
+// Hikamer - LSP統合（Hermes Agent agent/lsp/ 由来）
 // Language Server Protocolクライアント
 // コード補完・診断・定義ジャンプ
 // ==========================================

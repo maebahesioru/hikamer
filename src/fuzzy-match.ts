@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Fuzzy Match Engine（Hermes Agent fuzzy_match.py 完全移植）
+// Hikamer - Fuzzy Match Engine（Hermes Agent fuzzy_match.py 完全移植）
 // 9戦略ファジー検索置換＋エスケープドリフト検出＋候補提示
 // ==========================================
 

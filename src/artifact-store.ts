@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Artifact Store + MECE Classifier（toprank openclaw/bin/ 由来）
+// Hikamer - Artifact Store + MECE Classifier（toprank openclaw/bin/ 由来）
 // イミュータブル実行アーティファクト + MECE分類 + 優先度スコアリング
 // ==========================================
 

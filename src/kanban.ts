@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Kanbanボード（Hermes Agent kanban由来）
+// Hikamer - Kanbanボード（Hermes Agent kanban由来）
 // カラム別タスク管理 + WIP制限 + スイムレーン
 // ==========================================
 

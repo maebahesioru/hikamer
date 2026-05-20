@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - LLM-as-Function + Intent Routing（ViMax agents/ 由来）
+// Hikamer - LLM-as-Function + Intent Routing（ViMax agents/ 由来）
 // Pydantic I/Oパターンの軽量実装 + インテントルーティング
 // ==========================================
 
@@ -63,9 +63,9 @@ export async function llmFunction<T>(
   };
 }
 
-/** LLM呼び出し（プレースホルダー、実際はAikataのプロバイダを使う） */
+/** LLM呼び出し（プレースホルダー、実際はHikamerのプロバイダを使う） */
 async function callLLM(prompt: string, config: LLMFunctionConfig): Promise<string> {
-  // 実際のAikataプロバイダ呼び出しに置き換え
+  // 実際のHikamerプロバイダ呼び出しに置き換え
   // const { complete } = await import("./providers/base");
   // return complete(prompt, config);
   return `LLM response for: ${prompt.slice(0, 50)}...`; // placeholder

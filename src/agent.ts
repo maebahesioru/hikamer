@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - エージェントループ v1.2 (streaming + reasoning)
+// Hikamer - エージェントループ v1.2 (streaming + reasoning)
 // ==========================================
 
 import type { AgentResult, LLMProvider, LLMChunk, Message, ToolLogEntry } from "./types";

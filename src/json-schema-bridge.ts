@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Zod → JSON Schema ブリッジ
+// Hikamer - Zod → JSON Schema ブリッジ
 // 出典: clawpatch (openclaw/clawpatch) src/provider-schema.ts
 // ZodスキーマをLLMのJSONモードに対応したJSON Schemaに変換
 // ==========================================

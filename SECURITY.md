@@ -2,7 +2,7 @@
 
 ## 報告方法
 
-脆弱性を発見した場合は [Issue](https://github.com/maebahesioru/aikata/issues) を作成してください。
+脆弱性を発見した場合は [Issue](https://github.com/maebahesioru/hikamer/issues) を作成してください。
 
 ## 対象範囲
 

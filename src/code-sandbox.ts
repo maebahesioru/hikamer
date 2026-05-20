@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - コードサンドボックス（OpenHuman javascript + runtime_node/runtime_python由来）
+// Hikamer - コードサンドボックス（OpenHuman javascript + runtime_node/runtime_python由来）
 // 隔離されたJS/Pythonコード実行環境
 // ==========================================
 

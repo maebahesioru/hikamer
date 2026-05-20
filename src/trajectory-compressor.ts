@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 軌跡圧縮（Hermes Agent trajectory_compressor.py 由来）
+// Hikamer - 軌跡圧縮（Hermes Agent trajectory_compressor.py 由来）
 // 会話軌跡の圧縮・重要情報抽出・パターン認識
 // ==========================================
 

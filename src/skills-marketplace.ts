@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Skills Marketplace Connector (v1.69)
+// Hikamer - Skills Marketplace Connector (v1.69)
 // 出典: skills.sh API + gh skill CLI + npx skills add
 // skills.sh のオープンエコシステムと接続
 // ==========================================

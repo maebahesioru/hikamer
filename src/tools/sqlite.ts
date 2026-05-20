@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - SQLiteクエリツール (読み取り専用)
+// Hikamer - SQLiteクエリツール (読み取り専用)
 // ==========================================
 
 import { db } from "../db";
@@ -10,7 +10,7 @@ const sqliteTool: ToolDescriptor = {
   emoji: "🗄️",
   owner: "core",
   name: "sqlite",
-  description: "AikataのSQLiteデータベースを読み取り専用でクエリします。テーブル: conversations, messages, tool_logs, cron_jobs, config。",
+  description: "HikamerのSQLiteデータベースを読み取り専用でクエリします。テーブル: conversations, messages, tool_logs, cron_jobs, config。",
   parameters: {
     type: "object",
     properties: {

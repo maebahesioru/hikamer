@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - スキルローダー（Hermes Agent + OpenHuman由来）
+// Hikamer - スキルローダー（Hermes Agent + OpenHuman由来）
 // data/skills/*/SKILL.md を動的ロードしてコンテキスト注入
 // ==========================================
 

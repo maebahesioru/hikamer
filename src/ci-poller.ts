@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - CI Poller（roborev internal/daemon/ci_poller.go 由来）
+// Hikamer - CI Poller（roborev internal/daemon/ci_poller.go 由来）
 // GitHub PR監視 + 自動レビューキューイング
 // ==========================================
 
@@ -74,7 +74,7 @@ export class CiPoller {
           {
             headers: {
               Authorization: `Bearer ${this.config.githubToken}`,
-              "User-Agent": "Aikata-CI-Poller",
+              "User-Agent": "Hikamer-CI-Poller",
               Accept: "application/vnd.github.v3+json",
             },
             timeoutMs: 15000,
@@ -142,7 +142,7 @@ export class CiPoller {
       {
         headers: {
           Authorization: `Bearer ${this.config.githubToken}`,
-          "User-Agent": "Aikata-CI-Poller",
+          "User-Agent": "Hikamer-CI-Poller",
           Accept: "application/vnd.github.v3.diff",
         },
         timeoutMs: 30000,
@@ -158,7 +158,7 @@ export class CiPoller {
       {
         headers: {
           Authorization: `Bearer ${this.config.githubToken}`,
-          "User-Agent": "Aikata-CI-Poller",
+          "User-Agent": "Hikamer-CI-Poller",
         },
         timeoutMs: 15000,
       },
@@ -182,7 +182,7 @@ export class CiPoller {
           method: "POST",
           headers: {
             Authorization: `Bearer ${this.config.githubToken}`,
-            "User-Agent": "Aikata-CI-Poller",
+            "User-Agent": "Hikamer-CI-Poller",
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ body }),

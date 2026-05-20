@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 認証情報プール（Hermes Agent credential_pool.py 由来）
+// Hikamer - 認証情報プール（Hermes Agent credential_pool.py 由来）
 // 複数APIキーの管理・自動ローテーション・レート制限対応
 // ==========================================
 

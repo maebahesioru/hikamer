@@ -1,4 +1,4 @@
-# Aikata（アイカタ）
+# Hikamer（ヒカマー）
 
 自律型AIエージェント。Discord / Telegram / CLI で動作するマルチプラットフォームの「相棒」。
 
@@ -16,8 +16,8 @@
 ## クイックスタート
 
 ```bash
-git clone https://github.com/maebahesioru/aikata.git
-cd aikata
+git clone https://github.com/maebahesioru/hikamer.git
+cd hikamer
 npm install
 cp .env.example .env
 # .env に Discord/Telegramトークンを記入

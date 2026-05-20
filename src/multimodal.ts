@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Multi-Modal Input Handler (v1.70)
+// Hikamer - Multi-Modal Input Handler (v1.70)
 // 画像・音声・動画の入力処理
 // 画像: base64エンコード->LLM Vision API
 // 音声: ローカル文字起こし + APIフォールバック

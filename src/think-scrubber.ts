@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Streaming Think Scrubber（Hermes Agent think_scrubber.py由来）
+// Hikamer - Streaming Think Scrubber（Hermes Agent think_scrubber.py由来）
 // ストリーミング中の思考タグ（<think>...</think>、<reasoning>...</reasoning>など）を
 // ステートマシンで追跡しながらリアルタイム除去
 // ==========================================

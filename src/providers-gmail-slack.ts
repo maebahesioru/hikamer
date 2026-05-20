@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Gmail/Slackプロバイダー（OpenHuman composio/providers/ 由来）
+// Hikamer - Gmail/Slackプロバイダー（OpenHuman composio/providers/ 由来）
 // メール・メッセージのCRUD操作
 // ==========================================
 

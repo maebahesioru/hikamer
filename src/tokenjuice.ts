@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - TokenJuice Terminal Output Compaction（OpenHuman tokenjuice/ 完全移植）
+// Hikamer - TokenJuice Terminal Output Compaction（OpenHuman tokenjuice/ 完全移植）
 // LLMコンテキスト節約のためのターミナル出力圧縮エンジン
 // 3層ルール・ANSI除去・重複行削減・インライン要約
 // ==========================================

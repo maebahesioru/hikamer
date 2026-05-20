@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 設定管理（OpenHuman config + OpenClaw config由来）
+// Hikamer - 設定管理（OpenHuman config + OpenClaw config由来）
 // スキーマ検証・環境変数管理・ホットリロード
 // ==========================================
 
@@ -175,7 +175,7 @@ class ConfigManager {
   startHotReload(): void {
     const configFile = resolve(process.cwd(), "config.yaml");
     if (!existsSync(configFile)) {
-      // aikata-config.json を試す
+      // hikamer-config.json を試す
       const altPath = resolve(process.env.DATA_DIR || "./data", "config.json");
       if (existsSync(altPath)) {
         this.watchFile(altPath);
@@ -239,9 +239,9 @@ class ConfigManager {
 // ==================== 組み込みスキーマ ====================
 
 const BUILTIN_SCHEMA: ConfigSchema = {
-  name: "aikata",
+  name: "hikamer",
   version: "1.0",
-  description: "Aikata 基本設定",
+  description: "Hikamer 基本設定",
   fields: [
     { key: "maxIterations", type: "number", label: "最大反復数", description: "エージェントループの最大反復", default: 10, envVar: "AIKATA_MAX_ITERATIONS" },
     { key: "streamEnabled", type: "boolean", label: "ストリーミング", description: "ストリーミング応答の有効/無効", default: true, envVar: "AIKATA_STREAM" },

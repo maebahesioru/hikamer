@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - RESTful HTTP APIサーバー（OpenHuman service/api層由来）
+// Hikamer - RESTful HTTP APIサーバー（OpenHuman service/api層由来）
 // 外部からのHTTP経由操作エンドポイント
 // ==========================================
 

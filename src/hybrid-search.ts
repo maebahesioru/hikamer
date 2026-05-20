@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ハイブリッド検索エンジン
+// Hikamer - ハイブリッド検索エンジン
 // 出典: agentmemory (rohitg00/agentmemory) の HybridSearch を純TypeScript実装
 // BM25 + コサイン類似度 + ナレッジグラフ + RRF融合
 // 強化: ストリーム別正規化 / 日本語StopWord / クエリ拡張 / Jaccard Dedup / 文ウィンドウ拡張

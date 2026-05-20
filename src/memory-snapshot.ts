@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Gitスナップショット（メモリバージョン管理）
+// Hikamer - Gitスナップショット（メモリバージョン管理）
 // 出典: agentmemory (rohitg00/agentmemory) Git Snapshots
 // ==========================================
 
@@ -34,8 +34,8 @@ class MemorySnapshot {
     try {
       if (!existsSync(resolve(SNAPSHOT_DIR, ".git"))) {
         execSync("git init", { cwd: SNAPSHOT_DIR, stdio: "pipe" });
-        execSync('git config user.name "Aikata Memory"', { cwd: SNAPSHOT_DIR, stdio: "pipe" });
-        execSync('git config user.email "memory@aikata.local"', { cwd: SNAPSHOT_DIR, stdio: "pipe" });
+        execSync('git config user.name "Hikamer Memory"', { cwd: SNAPSHOT_DIR, stdio: "pipe" });
+        execSync('git config user.email "memory@hikamer.local"', { cwd: SNAPSHOT_DIR, stdio: "pipe" });
 
         // .gitignore
         writeFileSync(resolve(SNAPSHOT_DIR, ".gitignore"), "node_modules/\n");

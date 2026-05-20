@@ -1,6 +1,6 @@
 // ==========================================
-// Aikata - 移行ツール v1
-// openclaw / hermes-agent / openhuman → Aikata
+// Hikamer - 移行ツール v1
+// openclaw / hermes-agent / openhuman → Hikamer
 // スキル・メモリ・設定のインポート
 // ==========================================
 
@@ -24,13 +24,13 @@ export type MigrationSource = "openclaw" | "hermes-agent" | "openhuman" | "auto"
 // ==================== スキル移行 ====================
 
 /**
- * 外部フレームワークのskills/ディレクトリからAikataのskills/にSKILL.mdをインポート。
+ * 外部フレームワークのskills/ディレクトリからHikamerのskills/にSKILL.mdをインポート。
  * 
- * openclaw: ~/.openclaw/skills/<name>/SKILL.md → Aikata ./skills/<name>/SKILL.md
- * hermes-agent: ~/.hermes/skills/<name>/SKILL.md → Aikata ./skills/<name>/SKILL.md
+ * openclaw: ~/.openclaw/skills/<name>/SKILL.md → Hikamer ./skills/<name>/SKILL.md
+ * hermes-agent: ~/.hermes/skills/<name>/SKILL.md → Hikamer ./skills/<name>/SKILL.md
  * 
  * 互換性: 全フレームワークが YAML frontmatter + Markdown body の同一フォーマット。
- * Aikataパーサーは未知のfrontmatterキーを無視するため、そのまま読める。
+ * Hikamerパーサーは未知のfrontmatterキーを無視するため、そのまま読める。
  */
 export function migrateSkills(
   sourceDir: string,
@@ -102,10 +102,10 @@ export function migrateSkills(
 // ==================== メモリ移行 ====================
 
 /**
- * 外部フレームワークのメモリファイルをAikata形式にインポート。
+ * 外部フレームワークのメモリファイルをHikamer形式にインポート。
  * 
- * hermes-agent: ~/.hermes/memory/MEMORY.md → Aikata ./data/memory/MEMORY.md
- * openclaw: ~/.openclaw/MEMORY.md → Aikata ./data/memory/MEMORY.md
+ * hermes-agent: ~/.hermes/memory/MEMORY.md → Hikamer ./data/memory/MEMORY.md
+ * openclaw: ~/.openclaw/MEMORY.md → Hikamer ./data/memory/MEMORY.md
  * 
  * 互換性: MEMORY.md と USER.md は全フレームワークで同一フォーマット。
  * § 区切り、プレーンMarkdown。ゼロ変換でそのまま使える。
@@ -177,7 +177,7 @@ export function migrateMemory(
 
 /**
  * hermes-agent の config.yaml から使える部分を抽出。
- * Aikataは providers.json + .env 形式のため、変換が必要。
+ * Hikamerは providers.json + .env 形式のため、変換が必要。
  * 
  * 抽出可能な項目:
  * - models.provider.*.api_key → .env または providers.json
@@ -319,10 +319,10 @@ export function migrateOpenclawConfig(
 // ==================== Cron移行 ====================
 
 /**
- * hermes-agent の jobs.json からAikataのcronジョブに変換。
+ * hermes-agent の jobs.json からHikamerのcronジョブに変換。
  * 
  * hermes-agent形式: { jobs: [{ id, schedule, prompt, deliver, skills }] }
- * Aikata形式: SQLite scheduler_jobs テーブル
+ * Hikamer形式: SQLite scheduler_jobs テーブル
  */
 export async function migrateHermesCron(
   jobsPath: string,
@@ -342,7 +342,7 @@ export async function migrateHermesCron(
     total = jobs.length;
 
     if (!dryRun) {
-      // Aikataのスケジューラーに登録
+      // Hikamerのスケジューラーに登録
       for (const job of jobs) {
         try {
           // 動的インポートでスケジューラーを呼ぶ（存在する場合のみ）
@@ -379,7 +379,7 @@ export async function migrateHermesCron(
 // ==================== 一括移行 ====================
 
 /**
- * ソースフレームワークからAikataへの完全移行を実行。
+ * ソースフレームワークからHikamerへの完全移行を実行。
  * スキル・メモリ・設定の3つを一括でインポート。
  * 
  * @param source - 移行元フレームワーク
@@ -492,7 +492,7 @@ export async function migrateAll(
  */
 export function formatMigrationReport(report: MigrationReport): string {
   const lines: string[] = [
-    `🔄 **Aikata 移行レポート**`,
+    `🔄 **Hikamer 移行レポート**`,
     `移行元: **${report.source}**`,
     `所要時間: ${(report.durationMs / 1000).toFixed(1)}秒`,
     "",

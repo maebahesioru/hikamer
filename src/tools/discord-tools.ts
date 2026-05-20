@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Discord管理ツール（Hermes Agent由来）
+// Hikamer - Discord管理ツール（Hermes Agent由来）
 // サーバー情報/メンバー一覧/チャンネル管理/スレッド作成
 // ==========================================
 
@@ -168,7 +168,7 @@ const discordCoreTool: ToolDescriptor = {
           const thread = await (channel as any).threads.create({
             name,
             autoArchiveDuration: 60,
-            reason: "Aikata: スレッド作成",
+            reason: "Hikamer: スレッド作成",
           });
 
           return `💬 スレッド作成: **${name}**\nID: \`${thread.id}\``;

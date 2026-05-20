@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - LLMプロバイダー (v1.4 - retry + reasoning + streaming)
+// Hikamer - LLMプロバイダー (v1.4 - retry + reasoning + streaming)
 // ==========================================
 
 import type { LLMProvider, LLMResponse, LLMChunk, Message, Tool, ToolCall } from "../types";

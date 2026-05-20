@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Worker Pool（roborev internal/daemon/worker.go + storage/jobs.go由来）
+// Hikamer - Worker Pool（roborev internal/daemon/worker.go + storage/jobs.go由来）
 // DBバックアップジョブ管理 + クレーム/リトライ/フェイルオーバー
 // ==========================================
 

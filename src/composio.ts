@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 外部統合プラットフォーム（OpenHuman composio/ 由来）
+// Hikamer - 外部統合プラットフォーム（OpenHuman composio/ 由来）
 // Gmail/Slack/Notion/GitHub等の外部サービス統合
 // ==========================================
 
@@ -131,7 +131,7 @@ class ComposioClient {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
-            "User-Agent": "Aikata",
+            "User-Agent": "Hikamer",
           },
           body: JSON.stringify({
             title,

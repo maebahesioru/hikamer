@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - REM Memory Lifecycle（OpenClaw Active Memory由来）
+// Hikamer - REM Memory Lifecycle（OpenClaw Active Memory由来）
 // 短期→長期記憶の自動昇格・圧縮・統合
 // 会話履歴から重要な情報を抽出して長期記憶に昇格
 // ==========================================

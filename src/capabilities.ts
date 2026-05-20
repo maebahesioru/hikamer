@@ -1,6 +1,6 @@
 // ==========================================
-// Aikata - 機能カタログ（OpenHuman about_app/ 完全移植）
-// 全Aikata機能の自己記述カタログ + カテゴリ別検索 + プライバシー開示
+// Hikamer - 機能カタログ（OpenHuman about_app/ 完全移植）
+// 全Hikamer機能の自己記述カタログ + カテゴリ別検索 + プライバシー開示
 // ==========================================
 
 import { logger } from "./utils/logger";
@@ -181,7 +181,7 @@ export function formatCapabilityList(caps: Capability[], verbose = false): strin
   };
 
   const lines: string[] = [
-    "📋 **Aikata 機能カタログ**",
+    "📋 **Hikamer 機能カタログ**",
     `  合計: ${caps.length}機能 (✅${total.stable} 🧪${total.beta} ${total.coming_soon ? "🔜" + total.coming_soon : ""}${total.deprecated ? " ⚠️" + total.deprecated : ""})`,
     "",
   ];

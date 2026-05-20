@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Plugin Agent Architecture（roborev internal/agent/ 由来）
+// Hikamer - Plugin Agent Architecture（roborev internal/agent/ 由来）
 // エージェントインターフェース + レジストリ + フォールバックチェーン
 // ==========================================
 

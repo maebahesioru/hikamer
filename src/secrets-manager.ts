@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Secrets Management（OpenClaw secrets/ 由来）
+// Hikamer - Secrets Management（OpenClaw secrets/ 由来）
 // SecretRef解決（env/file/execプロバイダ）+ 監査・検証
 // ==========================================
 

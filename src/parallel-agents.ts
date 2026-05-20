@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 並列エージェントWorktree分離
+// Hikamer - 並列エージェントWorktree分離
 // 出典: Orca (stablyai/orca) Parallel Agent Worktree Strategy
 // 各サブエージェントに独立したGit Worktreeを割り当て
 // ==========================================
@@ -32,7 +32,7 @@ class WorktreeManager {
   private baseRepo: string;
 
   constructor(baseRepo?: string) {
-    this.baseRepo = baseRepo || resolve(process.env.HOME || "/root", "Desktop/Aikata");
+    this.baseRepo = baseRepo || resolve(process.env.HOME || "/root", "Desktop/Hikamer");
     if (!existsSync(WORKTREE_BASE)) {
       mkdirSync(WORKTREE_BASE, { recursive: true });
     }

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - リンクリダイレクト（OpenHuman redirect_links/ 由来）
+// Hikamer - リンクリダイレクト（OpenHuman redirect_links/ 由来）
 // URL短縮・リダイレクト管理・クリック追跡
 // ==========================================
 
@@ -36,7 +36,7 @@ class RedirectManager {
   private links: Map<string, RedirectLink> = new Map();
   private initialized = false;
   private maxLinks = 500;
-  private baseUrl = process.env.REDIRECT_BASE_URL || "https://aikata.app/r";
+  private baseUrl = process.env.REDIRECT_BASE_URL || "https://hikamer.app/r";
 
   init(): void {
     if (this.initialized) return;

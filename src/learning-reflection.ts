@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 学習リフレクション（OpenHuman learning/reflection.rs 由来）
+// Hikamer - 学習リフレクション（OpenHuman learning/reflection.rs 由来）
 // ユーザーインタラクションからの学習・パターン抽出
 // ==========================================
 

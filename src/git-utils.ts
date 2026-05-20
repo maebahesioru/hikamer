@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Git Utils（roborev internal/git/git.go 由来）
+// Hikamer - Git Utils（roborev internal/git/git.go 由来）
 // 高機能Git操作ラッパー + ワークフロー管理
 // ==========================================
 

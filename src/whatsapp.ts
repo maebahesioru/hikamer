@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - WhatsAppデータ（OpenHuman whatsapp_data/ 由来）
+// Hikamer - WhatsAppデータ（OpenHuman whatsapp_data/ 由来）
 // WhatsAppチャットデータの解析・検索
 // ==========================================
 

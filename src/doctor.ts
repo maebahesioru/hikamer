@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 自己診断（OpenHuman doctor/ 由来）
+// Hikamer - 自己診断（OpenHuman doctor/ 由来）
 // システムヘルスチェック・モデルプローブ・診断レポート
 // ==========================================
 
@@ -330,7 +330,7 @@ class Doctor {
       // DBファイルの存在確認
       const dbPath = path.join(
         process.env.AIKATA_WORKSPACE || process.cwd(),
-        "aikata.db"
+        "hikamer.db"
       );
 
       if (fs.existsSync(dbPath)) {

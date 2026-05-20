@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - メモリツリー（OpenHuman openhuman/memory + tree_summarizer由来）
+// Hikamer - メモリツリー（OpenHuman openhuman/memory + tree_summarizer由来）
 // 階層的メモリ管理 + 自動要約 + エンティティ発見
 // ==========================================
 
@@ -88,7 +88,7 @@ class MemoryTree {
         id: this.rootId,
         type: "summary",
         label: "Root",
-        content: "Aikata Memory Tree Root",
+        content: "Hikamer Memory Tree Root",
         tags: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - ローカル推論（OpenHuman inference/local/ 由来）
+// Hikamer - ローカル推論（OpenHuman inference/local/ 由来）
 // ローカルLLM・Whisper音声認識
 // ==========================================
 

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 認証情報マネージャー（OpenHuman credentials + encryption由来）
+// Hikamer - 認証情報マネージャー（OpenHuman credentials + encryption由来）
 // API鍵・OAuthトークンの暗号化保存・自動更新
 // ==========================================
 
@@ -24,7 +24,7 @@ function getMasterKey(): Buffer {
   }
   // フォールバック: プロセス固有のキー（再起動で無効）
   return createHash("sha256")
-    .update(`aikata-${process.pid}-${new Date().toISOString().slice(0, 10)}`)
+    .update(`hikamer-${process.pid}-${new Date().toISOString().slice(0, 10)}`)
     .digest();
 }
 

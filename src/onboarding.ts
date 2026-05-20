@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - オンボーディング（Hermes Agent onboarding.py 由来）
+// Hikamer - オンボーディング（Hermes Agent onboarding.py 由来）
 // 新規ユーザー導入・初期設定フロー
 // ==========================================
 
@@ -54,9 +54,9 @@ class OnboardingManager {
   private readonly MESSAGES: Record<OnboardingStep, OnboardingMessage> = {
     welcome: {
       step: "welcome",
-      title: "👋 Aikataへようこそ！",
+      title: "👋 Hikamerへようこそ！",
       content:
-        "Aikataは多機能AIエージェントです。\n" +
+        "Hikamerは多機能AIエージェントです。\n" +
         "Discord/Telegram/CLIから操作できます。\n\n" +
         "まずは基本的な設定を進めましょう。",
       tips: [
@@ -69,7 +69,7 @@ class OnboardingManager {
       step: "platform_setup",
       title: "🔌 プラットフォーム設定",
       content:
-        "Aikataは複数のプラットフォームに対応しています。\n\n" +
+        "Hikamerは複数のプラットフォームに対応しています。\n\n" +
         "現在利用可能なプラットフォーム:\n" +
         "- Discord: チャットBotとして動作\n" +
         "- Telegram: チャットBotとして動作\n" +
@@ -99,7 +99,7 @@ class OnboardingManager {
       step: "tool_intro",
       title: "🛠️ ツール紹介",
       content:
-        "Aikataには多数のツールが組み込まれています。\n\n" +
+        "Hikamerには多数のツールが組み込まれています。\n\n" +
         "主なツール:\n" +
         "- ファイル操作（読み書き・編集）\n" +
         "- Web検索・スクレイピング\n" +
@@ -133,7 +133,7 @@ class OnboardingManager {
       title: "🎉 セットアップ完了！",
       content:
         "おめでとうございます！セットアップが完了しました。\n\n" +
-        "これでAikataの全ての機能を利用できます。\n" +
+        "これでHikamerの全ての機能を利用できます。\n" +
         "何か質問があれば、いつでも聞いてください。",
       tips: [
         "`/help`で全コマンド一覧",

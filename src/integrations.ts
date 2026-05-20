@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 外部連携（OpenHuman integrations/ 由来）
+// Hikamer - 外部連携（OpenHuman integrations/ 由来）
 // サードパーティサービス統合
 // Apify, Google Places, Twilio, 株価, Seltz
 // ==========================================

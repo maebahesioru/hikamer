@@ -1,10 +1,10 @@
-# Contributing to Aikata
+# Contributing to Hikamer
 
 ## 開発の始め方
 
 ```bash
-git clone https://github.com/maebahesioru/aikata.git
-cd aikata
+git clone https://github.com/maebahesioru/hikamer.git
+cd hikamer
 npm install
 cp .env.example .env
 npm run cli

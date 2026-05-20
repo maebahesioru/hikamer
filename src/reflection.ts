@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - リフレクションシステム（OpenHuman subconscious/reflection.rs 由来）
+// Hikamer - リフレクションシステム（OpenHuman subconscious/reflection.rs 由来）
 // サブコンシャスの深いリフレクション・自己分析
 // ==========================================
 

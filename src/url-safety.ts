@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - URL安全機構（Hermes Agent + OpenHuman由来）
+// Hikamer - URL安全機構（Hermes Agent + OpenHuman由来）
 // SSRF対策、プライベートIPブロック、不正URL検出
 // ==========================================
 

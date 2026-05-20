@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - 音声処理（OpenHuman voice/ 由来）
+// Hikamer - 音声処理（OpenHuman voice/ 由来）
 // 音声キャプチャ・TTS・音声認識・ホットキー
 // ==========================================
 
@@ -67,7 +67,7 @@ class VoiceManager {
 
     const start = Date.now();
     const id = `rec-${Date.now()}`;
-    const filePath = `/tmp/aikata-voice-${id}.wav`;
+    const filePath = `/tmp/hikamer-voice-${id}.wav`;
 
     try {
       // arecord (Linux) / ffmpeg で録音
@@ -117,7 +117,7 @@ class VoiceManager {
       format: options?.format ?? "wav",
     };
 
-    const outputPath = `/tmp/aikata-tts-${Date.now()}.${opts.format}`;
+    const outputPath = `/tmp/hikamer-tts-${Date.now()}.${opts.format}`;
 
     try {
       if (this.hasCommand("espeak")) {

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Feedback Scoring Engine（toprank openclaw/bin/score_feedback.py 由来）
+// Hikamer - Feedback Scoring Engine（toprank openclaw/bin/score_feedback.py 由来）
 // 自律アクションの結果を定量評価 → 学習・適応
 // ==========================================
 

@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Multi-Channel Framework（OpenHuman channels/由来）
+// Hikamer - Multi-Channel Framework（OpenHuman channels/由来）
 // 抽象Channel trait + マルチプロバイダ統合（Telegram/Slack/WhatsApp）
 // ==========================================
 

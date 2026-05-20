@@ -1,5 +1,5 @@
 // ==========================================
-// Aikata - Security Sandbox（OpenHuman security/ 由来）
+// Hikamer - Security Sandbox（OpenHuman security/ 由来）
 // ポリシーエンジン + サンドボックス隔離 + コマンドリスク評価
 // ==========================================
 
