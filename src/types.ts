@@ -110,3 +110,27 @@ export type Platform = "discord" | "telegram" | "cli";
 export interface StreamConfig {
   enabled: boolean;
 }
+
+// ==================== 構造化ツールエラー ====================
+
+/** ツール実行時の構造化エラー。LLMにリッチなエラー情報を渡す */
+export class ToolError extends Error {
+  retryable: boolean;
+  code: string;
+  details?: Record<string, unknown>;
+
+  constructor(message: string, options?: { retryable?: boolean; code?: string; details?: Record<string, unknown> }) {
+    super(message);
+    this.name = "ToolError";
+    this.retryable = options?.retryable ?? false;
+    this.code = options?.code ?? "TOOL_ERROR";
+    this.details = options?.details;
+  }
+
+  toToolResult(): string {
+    const parts = [`[エラー] ${this.message}`];
+    if (this.code) parts.push(`コード: ${this.code}`);
+    if (this.retryable) parts.push(`(再試行可能)`);
+    return parts.join(" | ");
+  }
+}

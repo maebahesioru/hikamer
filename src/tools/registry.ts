@@ -4,6 +4,7 @@
 // ==========================================
 
 import type { Tool, ToolDescriptor } from "../types";
+import { ToolError } from "../types";
 import { logger } from "../utils/logger";
 import { trimToolResult } from "../budget-config";
 
@@ -130,7 +131,9 @@ class ToolRegistry {
       return lineLimited;
     } catch (e: any) {
       const duration = Date.now() - start;
-      const err = `[エラー] ${e.message || String(e)}`;
+      const err = e instanceof ToolError
+        ? e.toToolResult()
+        : `[エラー] ${e.message || String(e)}`;
       this.afterHooks.forEach(fn => { try { fn(name, args, err, duration); } catch {} });
       return err;
     }

@@ -74,6 +74,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_cron_jobs_enabled
     ON cron_jobs(enabled, next_run);
 
+  -- FTS5全文検索（会話メッセージ検索用）
+  CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    content,
+    conversation_id UNINDEXED,
+    role UNINDEXED,
+    content='messages',
+    content_rowid='id'
+  );
+
+  CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts(rowid, content, conversation_id, role)
+    VALUES (new.id, new.content, new.conversation_id, new.role);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content, conversation_id, role)
+    VALUES ('delete', old.id, old.content, old.conversation_id, old.role);
+  END;
+
   CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,

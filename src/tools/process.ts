@@ -24,6 +24,8 @@ interface ProcessEntry {
   stdout: string[];
   stderr: string[];
   label?: string;
+  /** 最終ハートビート時刻。ゾンビ判定に使用 */
+  lastHeartbeat: number;
 }
 
 class ProcessRegistry {
@@ -59,6 +61,7 @@ class ProcessRegistry {
       stdout: [],
       stderr: [],
       label: options?.label,
+      lastHeartbeat: Date.now(),
     };
 
     proc.stdout?.on("data", (data: Buffer) => {

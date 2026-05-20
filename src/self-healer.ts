@@ -71,9 +71,13 @@ const HEALING_ACTIONS: HealingAction[] = [
     heal: async () => {
       try {
         const { processRegistry } = await import("./tools/process");
+        const now = Date.now();
         for (const proc of processRegistry.list()) {
-          if (proc.status === "running" && Date.now() - proc.startedAt > 3600000) {
+          // ハートビートが1時間以上なければゾンビ判定
+          const heartbeatAge = now - ((proc as any).lastHeartbeat ?? proc.startedAt);
+          if (proc.status === "running" && heartbeatAge > 3600000) {
             processRegistry.kill(proc.id);
+            logger.info(`[Healer] ゾンビkill: ${proc.id} (最終hb ${Math.round(heartbeatAge/60000)}分前)`);
           }
         }
         return true;

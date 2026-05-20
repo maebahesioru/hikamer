@@ -26,7 +26,7 @@ const PROVIDERS_PATH = resolve(process.cwd(), "providers.json");
 
 let providersCache: ProvidersConfig | null = null;
 let runtimeConfig: AgentRuntimeConfig = {
-  maxIterations: parseInt(process.env.MAX_ITERATIONS || "") || 200,
+  maxIterations: parseInt(process.env.MAX_ITERATIONS || "") || 100,
 };
 
 function loadProviders(): ProvidersConfig {

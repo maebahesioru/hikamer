@@ -196,6 +196,29 @@ export function setDbConfig(key: string, value: string): void {
   db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime('now', 'localtime'))").run(key, value);
 }
 
+// ==================== FTS5全文検索 ====================
+
+/**
+ * FTS5全文検索 — 過去の会話メッセージを検索
+ * @param query 検索クエリ
+ * @param limit 最大結果数
+ */
+export function searchMessages(query: string, limit = 20): Array<{
+  conversation_id: string;
+  content: string;
+  role: string;
+  rank: number;
+}> {
+  const rows = db.prepare(`
+    SELECT conversation_id, content, role, rank
+    FROM messages_fts
+    WHERE messages_fts MATCH ?
+    ORDER BY rank
+    LIMIT ?
+  `).all(query, limit) as any[];
+  return rows;
+}
+
 // ==================== 内部 ====================
 
 function toMessage(row: MessageRow): Message {

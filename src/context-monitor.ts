@@ -116,6 +116,11 @@ class ContextMonitor {
     logger.debug(`[ContextMonitor] 実トークン: ${usedTokens.toLocaleString()}`);
   }
 
+  /** 現在のコンテキストレベルを取得（agent.tsからの安全なアクセス用） */
+  getLevel(): ContextLevel {
+    return this.currentLevel;
+  }
+
   /** 有効/無効の切り替え */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;

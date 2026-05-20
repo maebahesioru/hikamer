@@ -84,8 +84,8 @@ export async function agentLoop(
     logger.debug(`[PromptEngine] 統合スキップ: ${e}`);
   }
 
-  // 全履歴を復元
-  const pastHistory = getHistory(conversationId, 99999);
+  // 全履歴を復元（最大200件に制限。メモリ安全性のため）
+  const pastHistory = getHistory(conversationId, 200);
 
   const messages: Message[] = [
     { role: "system", content: enhancedSystemPrompt },
@@ -127,10 +127,15 @@ export async function agentLoop(
       };
     }
 
-    // Grace Call: 最終反復なら「これが最後」メッセージを注入
+    // Grace Call: 最終反復なら即座に最大反復エラーを返す（余計なLLM呼び出し削減）
     if (iterations === runtimeConfig.maxIterations) {
-      const graceMsg = "[システム] これが最後の応答チャンスです。ツールは呼ばずに、テキストだけで直接回答してください。";
-      messages.push({ role: "user", content: graceMsg });
+      logger.warn(`最大反復回数到達: ${iterations}/${runtimeConfig.maxIterations}`);
+      return {
+        response: `最大反復回数（${runtimeConfig.maxIterations}回）に達したため処理を中断しました。\n/maxiter で上限を変更できます。`,
+        iterations,
+        toolLogs,
+        reasoning: allReasoning || undefined,
+      };
     }
 
     const tools = toolRegistry.getOpenAISchema();
@@ -210,8 +215,9 @@ export async function agentLoop(
 
       // テキスト応答のみ → 終了
       if (response.content && (!response.tool_calls || response.tool_calls.length === 0)) {
+        // 推論内容は履歴に保存しない（次ターンのコンテキスト浪費防止）
         saveMessages(conversationId, [
-          { role: "assistant", content: response.content, reasoning_content: response.reasoning_content },
+          { role: "assistant", content: response.content },
         ]);
         logger.info(`エージェント完了: ${iterations}反復`);
         return {
@@ -224,9 +230,12 @@ export async function agentLoop(
 
       const assistantMsg: Message = {
         role: "assistant",
-        content: response.content || "",
+        // ツール呼び出し時はフィラー内容を削除（「調べます」等の無駄トークン削減）
+        content: (response.tool_calls && response.tool_calls.length > 0)
+          ? ""
+          : (response.content || ""),
         tool_calls: response.tool_calls || [],
-        reasoning_content: response.reasoning_content,
+        // 推論内容は次ターンに持ち越さない（コンテキスト節約。累計は allReasoning に保持）
       };
       messages.push(assistantMsg);
 
@@ -309,7 +318,7 @@ export async function agentLoop(
       if (ctxWarning) {
         messages.push({ role: "user", content: ctxWarning });
         // クリティカルなら強制終了
-        if (contextMonitor["currentLevel"] === "critical") {
+        if (contextMonitor.getLevel() === "critical") {
           logger.warn("[Agent] コンテキスト枯渇のため強制終了");
           return {
             response: `⚠️ コンテキストが枯渇しました（${iterations}反復）。\\n最終結果: ${partialContent || response.content || "(応答なし)"}`,
@@ -391,12 +400,4 @@ export async function agentLoop(
       };
     }
   }
-
-  logger.warn(`最大反復回数到達: ${iterations}/${runtimeConfig.maxIterations}`);
-  return {
-    response: `最大反復回数（${runtimeConfig.maxIterations}回）に達したため処理を中断しました。\n/maxiter で上限を変更できます。`,
-    iterations,
-    toolLogs,
-    reasoning: allReasoning || undefined,
-  };
 }

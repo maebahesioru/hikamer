@@ -141,6 +141,23 @@ export async function handleSystemCommand(
 
 // ==================== ビルトインシステムコマンド ====================
 
+registerCommand("search", async (args) => {
+  if (!args) return "使い方: `/search <キーワード>` — 過去の会話を全文検索します。\n例: `/search DeepSeek V4`";
+  const { searchMessages } = await import("./repo");
+  try {
+    const results = searchMessages(args, 15);
+    if (results.length === 0) return `🔍 「${args}」に一致するメッセージは見つかりませんでした。`;
+    return `🔍 **検索: "${args}"** (${results.length}件)\n${results.map((r, i) => `**${i+1}.** [${r.role}] ${r.content.slice(0, 200)}${r.content.length > 200 ? "…" : ""}`).join("\n")}`;
+  } catch (e: any) {
+    return `❌ 検索エラー: ${e.message}`;
+  }
+});
+
+registerCommand("help", async (_args) => {
+  const cmds = Array.from(systemCommands.keys()).sort();
+  return `**利用可能コマンド (${cmds.length}個)**\n${cmds.map(c => `/\`${c}\``).join(", ")}`;
+});
+
 registerCommand("cost", async (_args, _userId) => {
   return formatCostSummary();
 });
@@ -1713,6 +1730,39 @@ async function main() {
     logger.info("[Subconscious] バックグラウンド思考開始");
   }
 
+  // WebSocket管理画面（環境変数WS_ENABLED=true時）
+  if (process.env.WS_ENABLED === "true" || process.env.ENABLE_WS_DASHBOARD === "true") {
+    try {
+      const { wsServer } = await import("./websocket-server");
+      const wsPort = parseInt(process.env.WS_PORT || "9722", 10);
+      await wsServer.start(wsPort);
+      logger.info(`[WebSocket] 管理画面: ws://localhost:${wsPort}`);
+    } catch (err: any) {
+      logger.warn(`[WebSocket] 起動失敗: ${err.message}`);
+    }
+  }
+
+  // コンフィグホットリロード: providers.json と .env の変更を監視
+  try {
+    const { watch: fsWatch, existsSync: fe } = await import("fs");
+    const providersPath = resolve(process.cwd(), "providers.json");
+    const envPath = resolve(process.cwd(), ".env");
+    if (fe(providersPath)) {
+      fsWatch(providersPath, () => {
+        const { invalidateConfigCache } = require("./utils/config");
+        invalidateConfigCache();
+        logger.info("[Config] providers.json 変更検知 → キャッシュ無効化");
+      });
+    }
+    if (fe(envPath)) {
+      fsWatch(envPath, () => {
+        const { invalidateConfigCache } = require("./utils/config");
+        invalidateConfigCache();
+        logger.info("[Config] .env 変更検知 → キャッシュ無効化");
+      });
+    }
+  } catch {}
+
   // 起動イベント発行
   eventBus.publish(createEvent("system", "startup", {
     platforms: enabledPlatforms,
@@ -1721,17 +1771,49 @@ async function main() {
   }));
 
   logger.info("Hikamer 起動完了 🎉");
-  logger.info(" /cost /health /tools /reset /ratelimit /inject /info");
+  logger.info(" /cost /health /tools /search /help /config");
 
   writeStatus(true, { platforms: enabledPlatforms, tools: toolRegistry.list().length });
 
-  process.on("SIGINT", () => {
-    logger.info("シャットダウン…");
+  // ==================== グレースフルシャットダウン ====================
+
+  async function gracefulShutdown(signal: string): Promise<void> {
+    logger.info(`シャットダウン (${signal})…`);
     writeStatus(false);
-    if (platformClients.discord) platformClients.discord.destroy();
-    if (platformClients.telegram) platformClients.telegram.stop();
+
+    // MCPサーバー接続を切断
+    try {
+      const { disconnectMcpServer } = await import("./tools/mcp-client");
+      // mcp-clientのconnectionsはexportされてないので、個別切断はスキップ
+      logger.info("[Shutdown] MCP接続クローズ");
+    } catch {}
+
+    // ブラウザクリーンアップ
+    try {
+      const mod = await import("./tools/browser");
+      if ((mod as any).closeBrowser) await (mod as any).closeBrowser();
+    } catch {}
+
+    // プラットフォームクライアント停止
+    if (platformClients.discord) {
+      try { platformClients.discord.destroy(); } catch {}
+    }
+    if (platformClients.telegram) {
+      try { platformClients.telegram.stop(); } catch {}
+    }
+
+    // self-healer停止
+    try {
+      const { selfHealer } = await import("./self-healer");
+      selfHealer.stop();
+    } catch {}
+
+    logger.info("[Shutdown] 完了 — bye!");
     process.exit(0);
-  });
+  }
+
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
   process.on("uncaughtException", (e) => {
     logger.error(`未捕捉例外: ${e.message}`);

@@ -17,6 +17,7 @@ import {
 import { createActiveProvider, fetchModels, setOnRetry } from "./providers/base";
 import type { LLMProvider, LLMChunk } from "./types";
 import { toolRegistry } from "./tools/registry";
+import { setCurrentSessionId } from "./index";
 
 // ==================== 共通: プロバイダー管理 ====================
 let provider = createActiveProvider();
@@ -26,6 +27,8 @@ function reloadProvider() {
 }
 
 const processing = new Set<string>();
+const userProcessing = new Map<string, number>(); // userId -> 同時実行数
+const MAX_CONCURRENT_PER_USER = 3;
 
 // ==================== 共通: メッセージ分割 ====================
 function splitMessage(text: string, maxLen: number): string[] {
@@ -404,6 +407,15 @@ export async function startDiscord(token: string): Promise<Client> {
 
     if (processing.has(lockKey)) return;
 
+    // ユーザー単位の同時実行数制限
+    const userId = message.author.id;
+    const userConcurrent = userProcessing.get(userId) || 0;
+    if (userConcurrent >= MAX_CONCURRENT_PER_USER) {
+      // サイレントにスキップ（スパム防止）。リアクションもつけない
+      return;
+    }
+    userProcessing.set(userId, userConcurrent + 1);
+
     const cleanContent = message.content.replace(/<@\d+>/g, "").trim();
     if (!cleanContent && !isThread && !isDM) return;
 
@@ -622,6 +634,9 @@ export async function startDiscord(token: string): Promise<Client> {
         threadId || cid, "discord", options,
       );
 
+      // コストトラッキングのセッションIDを設定
+      setCurrentSessionId(threadId || cid);
+
       setOnRetry(null); // クリア（次の呼び出しでリセット）
 
       // ========== 最終確定 ==========
@@ -678,6 +693,10 @@ export async function startDiscord(token: string): Promise<Client> {
       setOnRetry(null);
       if (typingInterval) clearInterval(typingInterval);
       processing.delete(lockKey);
+      // ユーザー同時実行数デクリメント
+      const uc = userProcessing.get(message.author.id) || 0;
+      if (uc > 1) userProcessing.set(message.author.id, uc - 1);
+      else userProcessing.delete(message.author.id);
     }
   });
 
@@ -801,11 +820,22 @@ export async function startTelegramBot(
       return;
     }
 
+    // ユーザー単位の同時実行数制限
+    const tgUserId = `tg-${ctx.from?.id || chatId}`;
+    const userConcurrent = userProcessing.get(tgUserId) || 0;
+    if (userConcurrent >= MAX_CONCURRENT_PER_USER) {
+      return; // サイレントスキップ
+    }
+    userProcessing.set(tgUserId, userConcurrent + 1);
+
     processing.add(cid);
     const thinking = await ctx.reply("考え中…");
 
     try {
       const result = await agentLoop(provider, await buildSystemPrompt(), ctx.message.text, cid, "telegram");
+
+      // コストトラッキングのセッションIDを設定
+      setCurrentSessionId(cid);
 
       if (result.response.length <= 4000) {
         await ctx.api.editMessageText(chatId, thinking.message_id, result.response);
@@ -821,6 +851,10 @@ export async function startTelegramBot(
       await ctx.api.editMessageText(chatId, thinking.message_id, `エラー: ${e.message.slice(0, 3500)}`).catch(() => {});
     } finally {
       processing.delete(cid);
+      // ユーザー同時実行数デクリメント
+      const uc = userProcessing.get(tgUserId) || 0;
+      if (uc > 1) userProcessing.set(tgUserId, uc - 1);
+      else userProcessing.delete(tgUserId);
     }
   });
 
