@@ -1306,6 +1306,57 @@ registerCommand("dashboard", async () => {
     "```bash\n# ブラウザで開く\nopen public/dashboard.html\n# または\nstart public/dashboard.html\n```";
 });
 
+// ==================== v1.72: 構造化出力（structlm + llguidanceパターン） ====================
+
+registerCommand("schema", async (args) => {
+  const { structuredOutput, SchemaValidator } = await import("./structured-output");
+  const sub = (args || "").trim();
+
+  if (!sub || sub === "help") {
+    return "📋 **構造化出力バリデーター**\n\n" +
+      "`/schema test <json> <schema>` — JSONをスキーマ検証\n" +
+      "`/schema tools` — 全ツールのスキーマ一覧\n" +
+      "例: `/schema test {\"name\":\"test\"} {\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"]}`";
+  }
+
+  if (sub === "tools") {
+    const { toolRegistry } = await import("./tools/registry");
+    const tools = toolRegistry.list();
+    const lines: string[] = ["🔧 **ツールスキーマ一覧**", ""];
+    for (const t of tools.slice(0, 15)) {
+      const schema = structuredOutput.buildToolSchema(t.parameters);
+      const reqFields = schema.required?.join(", ") || "なし";
+      lines.push(`**${t.name}**: 必須=[${reqFields}]`);
+    }
+    return lines.join("\n");
+  }
+
+  if (sub.startsWith("test ")) {
+    const rest = sub.slice(5);
+    // 簡易パース: test <json> <schema>
+    const firstBrace = rest.indexOf("{");
+    const secondBrace = rest.indexOf("{", firstBrace + 1);
+
+    if (firstBrace === -1) return "JSONとSchemaの両方を指定してください。";
+
+    const jsonStr = rest.slice(firstBrace, secondBrace > firstBrace ? secondBrace : undefined).trim();
+    const schemaStr = secondBrace > firstBrace ? rest.slice(secondBrace).trim() : "";
+
+    try {
+      const schema = JSON.parse(schemaStr);
+      const result = structuredOutput["validator"].validate(jsonStr, schema);
+      return `${structuredOutput.formatValidationResult(result)}\n\n` +
+        `有効: ${result.valid ? "✅" : "❌"}\n` +
+        (result.errors.length > 0 ? `エラー:\n${result.errors.map(e => `  • ${e}`).join("\n")}` : "") +
+        (result.data ? `\nデータ: ${JSON.stringify(result.data).slice(0, 200)}` : "");
+    } catch (e: any) {
+      return `❌ スキーマ解析エラー: ${e.message}`;
+    }
+  }
+
+  return "📋 `/schema test <json> <schema>` `/schema tools`";
+});
+
 // ==================== v1.70: マルチモーダル入力（画像認識 + 音声文字起こし） ====================
 
 registerCommand("vision", async (args) => {
