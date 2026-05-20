@@ -66,6 +66,20 @@ Aikataは**4階層メモリパイプライン**を搭載しています：
  * v1.38: ハイブリッド検索メモリを非同期で追加
  */
 export async function buildSystemPrompt(contextQuery?: string): Promise<string> {
+  // 現在時刻を注入（AIが「今」を認識できるように）
+  const now = new Date();
+  const nowStr = now.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const timestampBlock = `\n## 現在時刻\n- 現在: ${nowStr} (JST/日本時間)\n- UNIX: ${Math.floor(now.getTime() / 1000)}\n- ISO: ${now.toISOString()}\n`;
+
   try {
     const stats = getMemoryStats();
     const statsLine = stats.total > 0
@@ -73,12 +87,12 @@ export async function buildSystemPrompt(contextQuery?: string): Promise<string> 
       : "";
 
     const memoryBlock = await buildMemoryBlockAsync(contextQuery);
-    return `${BASE_PROMPT}${statsLine}${memoryBlock ? `\n${memoryBlock}` : ""}`;
+    return `${BASE_PROMPT}${timestampBlock}${statsLine}${memoryBlock ? `\n${memoryBlock}` : ""}`;
   } catch {
     // フォールバック：同期的に
     const { buildMemoryBlock } = await import("./memory");
     const memoryBlock = buildMemoryBlock();
-    return memoryBlock ? `${BASE_PROMPT}\n${memoryBlock}` : BASE_PROMPT;
+    return memoryBlock ? `${BASE_PROMPT}${timestampBlock}\n${memoryBlock}` : `${BASE_PROMPT}${timestampBlock}`;
   }
 }
 
