@@ -21,6 +21,9 @@ import { toolRegistry } from "./tools/registry";
 import { startMcpServer } from "./mcp-server";
 import { subconscious } from "./subconscious";
 import { approvalManager } from "./approval-workflow";
+import { telemetry } from "./telemetry";
+import { diary } from "./diary";
+import { registerTelemetryForBroadcast } from "./websocket-server";
 // DB初期化
 import "./db";
 

@@ -14,6 +14,7 @@ import {
 } from "./repo";
 import { goalSystem, extractGoalContext } from "./goal-system";
 import { contextMonitor } from "./context-monitor";
+import { telemetry } from "./telemetry";
 
 export interface AgentOptions {
   /** ストリーミング有効（デフォルトtrue） */
@@ -318,6 +319,34 @@ export async function agentLoop(
           };
         }
       }
+
+      // v1.74: テレメトリー記録
+      try {
+        const turnSuccess = !toolLogs.some(t => !t.success);
+        telemetry.recordTurn({
+          turnNumber: iterations,
+          sessionId: conversationId,
+          startTime: Date.now() - toolLogs.reduce((s, t) => s + t.duration_ms, 0),
+          endTime: Date.now(),
+          durationMs: toolLogs.reduce((s, t) => s + t.duration_ms, 0),
+          modelUsed: provider.model || "unknown",
+          inputTokens: 0,
+          outputTokens: (response.content || "").length,
+          reasoningTokens: (response.reasoning_content || "").length,
+          toolCalls: toolLogs.slice(-response.tool_calls!.length).map(t => ({
+            toolName: t.tool_name,
+            args: t.args,
+            result: t.result.slice(0, 500),
+            success: t.success,
+            durationMs: t.duration_ms || 0,
+            timestamp: Date.now(),
+            sessionId: conversationId,
+            iteration: iterations,
+          })),
+          success: turnSuccess,
+          error: turnSuccess ? undefined : toolLogs.filter(t => !t.success).map(t => t.error).filter(Boolean).join("; "),
+        });
+      } catch { /* telemetry failure must not crash agent */ }
 
       // 割り込みチェック（長時間ツールからの帰還後）
       if (signal?.aborted) {
