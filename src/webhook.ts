@@ -241,3 +241,27 @@ class WebhookRouter {
 }
 
 export const webhookRouter = new WebhookRouter();
+
+/** Webhook HTTPサーバーを起動 */
+export function startWebhookServer(port?: number): void {
+  const { createServer } = require("http");
+  const listenPort = port || parseInt(process.env.WEBHOOK_PORT || "9733", 10);
+  const server = createServer(async (req: any, res: any) => {
+    try {
+      const match = webhookRouter.route(req.url || "/");
+      if (match) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ tunnel: match.tunnel.path, kind: match.tunnel.kind, params: match.params }));
+      } else {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "no matching tunnel" }));
+      }
+    } catch (e: any) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+  });
+  server.listen(listenPort, () => {
+    process.stderr.write(`[Webhook] サーバー起動: http://localhost:${listenPort}\n`);
+  });
+}

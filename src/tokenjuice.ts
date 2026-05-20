@@ -379,10 +379,30 @@ function sleep(ms: number): Promise<void> {
 /** 状態フォーマット */
 export function formatTokenJuiceStatus(): string {
   return [
-    "🧃 **TokenJuice Engine**",
+    `🧃 **TokenJuice Engine**`,
     `  ビルトインルール: ${Object.keys(BUILTIN_RULES).length}`,
     `  ユーザールール: ${userRules.length}`,
     `  LLMセマフォ: ${semaphoreSlots.length}/${MAX_SLOTS}スロット使用中`,
     `  ゲート: ${gateEnabled ? "ON" : "OFF"}`,
   ].join("\n");
+}
+
+// ==================== terminal.ts 互換ラッパー ====================
+
+/** terminal.ts用の互換ラッパー。compactOutputを呼び出し、期待される戻り値形式に変換 */
+export function juiceOutput(command: string, output: string): {
+  ruleId: string;
+  text: string;
+  originalLines: number;
+  finalLines: number;
+} {
+  const result = compactOutput(output, "terminal", command);
+  const originalLines = output.split("\n").length;
+  const finalLines = result.text.split("\n").length;
+  return {
+    ruleId: result.matchedRules[0] || "none",
+    text: result.text,
+    originalLines,
+    finalLines,
+  };
 }
