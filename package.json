@@ -1,6 +1,6 @@
 {
   "name": "hikamer",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "自律型AIエージェント「Hikamer」- Discord Bot + マルチツール + SQLite永続化",
   "type": "module",
   "scripts": {
