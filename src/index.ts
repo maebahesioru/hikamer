@@ -1333,7 +1333,6 @@ registerCommand("schema", async (args) => {
 
   if (sub.startsWith("test ")) {
     const rest = sub.slice(5);
-    // 簡易パース: test <json> <schema>
     const firstBrace = rest.indexOf("{");
     const secondBrace = rest.indexOf("{", firstBrace + 1);
 
@@ -1355,6 +1354,54 @@ registerCommand("schema", async (args) => {
   }
 
   return "📋 `/schema test <json> <schema>` `/schema tools`";
+});
+
+// ==================== v1.73: 日記 + 実戦Tips (claude-code-best-practice) ====================
+
+registerCommand("diary", async (args) => {
+  const { diary } = await import("./diary");
+  const sub = (args || "").trim();
+
+  if (sub === "week" || sub === "weekly") {
+    return diary.getWeeklySummary();
+  }
+
+  if (sub === "generate" || sub === "gen") {
+    const entry = diary.generate();
+    return diary.formatDiary(entry);
+  }
+
+  if (sub && /^\d{4}-\d{2}-\d{2}$/.test(sub)) {
+    const entry = diary.generate(sub);
+    return diary.formatDiary(entry);
+  }
+
+  // デフォルト: 最近の日記一覧
+  const entries = diary.getRecent(7);
+  return diary.formatRecent(entries);
+});
+
+registerCommand("tips", async (args) => {
+  const sub = (args || "").trim().toLowerCase();
+
+  const tips: Record<string, string> = {
+    prompting: "💡 **プロンプト術**\n• Claudeに「grill me on these changes」でコードを挑戦させる\n• 中途半端な修正の後は「knowing everything you know now, scrap this and implement the elegant solution」\n• バグは「fix」の一言で。マイクロマネジメントするな",
+    planning: "📋 **計画**\n• 常にplan modeから始めろ\n• 詳細なスペックを書け。曖昧さを減らせ\n• PRDよりプロトタイプ。20-30バージョン作れ\n• 別のAIにプランをレビューさせろ",
+    context: "🧠 **コンテキスト管理**\n• 40%で「dumb zone」突入。30%以下をキープ\n• 300-400k tokensでcontext rot始まる\n• 失敗したらrewindして学びを再注入。修正を積み重ねるな\n• サブエージェントに重い作業を任せろ",
+    session: "📝 **セッション管理**\n• 全ターンは分岐点。Continue/Rewind/Clear/Compact/Subagentを選べ\n• 新しいタスク=新しいセッション\n• /compactより/clear+briefの方が精密\n• 重要なセッションは/renameして後で/resume",
+    skills: "🔧 **スキル設計**\n• 説明文はトリガーであって要約ではない。「いつ発火すべきか」を書け\n• 明白なことは書くな。Claudeのデフォルト行動から逸脱する部分だけ\n• レールを敷くな。ゴールと制約を与えろ、手順ではない\n• スキルにGotchasセクションを作れ。失敗ポイントを蓄積しろ",
+    memory: "📓 **メモリ管理**\n• CLAUDE.mdは200行以下に\n• monorepoでは祖先ロード+子孫レイジーロード\n• <important>タグで重要な指示を包め\n• 「テストを実行しろ」が一発で動かないならCLAUDE.mdが足りない",
+    daily: "📅 **日々の習慣**\n• Claude Codeを毎日アップデートしろ\n• 朝イチでCHANGELOGを読め\n• 1日1回以上やることはスキルかコマンドにしろ\n• コードは少なくとも1時間に1回コミットしろ",
+  };
+
+  if (sub && tips[sub]) return tips[sub]!;
+
+  return "💡 **実戦Tips** (Claude Codeチーム+コミュニティ 83選)\n\n" +
+    Object.entries(tips).map(([key, value]) => {
+      const firstLine = value.split("\n")[1] || "";
+      return `**/${key}** — ${firstLine.slice(2, 60)}...`;
+    }).join("\n") +
+    "\n\n`/tips <category>` で詳細表示";
 });
 
 // ==================== v1.70: マルチモーダル入力（画像認識 + 音声文字起こし） ====================
